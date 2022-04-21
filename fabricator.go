@@ -7,79 +7,62 @@ import (
 	"github.com/bxcodec/faker/v3"
 )
 
-type PersistenceHandler[T any] interface {
-	Save(instance T) T
-	SaveMany(instances []T) []T
+type PersistenceHandler[T any] func(instance T) T
+
+type Options[T any] struct {
+	PersistenceHandler PersistenceHandler[T]
+	Defaults           map[string]any
 }
 
 type Factory[T any] struct {
 	model              T
-	persistenceHandler *PersistenceHandler[T]
-	fields             map[string]FactoryFunction
+	persistenceHandler PersistenceHandler[T]
 	defaults           map[string]any
-	settableFields     []string
 }
 
-type FactoryFunction func(iteration int) any
-
-// New creates a factory for a model T. Can be extended with a persistenceHandler.
-func New[T any](model T) *Factory[T] {
-	if modelType := reflect.TypeOf(model); modelType.Kind() == reflect.Struct {
-		settableFields := make([]string, 0)
-		for i := 0; i < modelType.NumField(); i++ {
-			field := modelType.Field(i)
-			if field.IsExported() {
-				settableFields = append(settableFields, field.Name)
-			}
-		}
-		factory := Factory[T]{
-			model:          model,
-			fields:         make(map[string]FactoryFunction),
-			defaults:       make(map[string]any),
-			settableFields: settableFields,
-		}
-
-		return &factory
+// New creates a factory for a struct of type T, receives an optional Options object.
+// Options.Defaults is a map of fields names (keys) to default values.
+// Options.PersistenceHandler is a function that takes the created struct instance,
+// persists it in whatever persistence mechanisms are desired, and returns the resulting struct instance.
+func New[T any](model T, opts ...Options[T]) *Factory[T] {
+	if reflect.TypeOf(model).Kind() != reflect.Struct {
+		panic("unsupported value: model must be a struct")
 	}
-	panic("unsupported value: model must be a struct")
-}
 
-func (factory *Factory[T]) validateFieldName(fieldName string) {
-	for _, settableFieldName := range factory.settableFields {
-		if fieldName == settableFieldName {
-			return
-		}
+	var defaults map[string]any
+	var handler PersistenceHandler[T]
+
+	if len(opts) > 0 {
+		defaults = opts[0].Defaults
+		handler = opts[0].PersistenceHandler
 	}
-	panic(fmt.Sprintf("%s is either incorrect or does not correlate with a settable field", fieldName))
+
+	factory := Factory[T]{
+		model:              model,
+		defaults:           defaults,
+		persistenceHandler: handler,
+	}
+
+	return &factory
 }
 
-// SetPersistenceHandler sets the factory's persistence handler to the passed in value.
-func (factory *Factory[T]) SetPersistenceHandler(persistenceHandler PersistenceHandler[T]) *Factory[T] {
-	factory.persistenceHandler = &persistenceHandler
-	return factory
-}
-
-func (factory *Factory[T]) FieldBuilder(fieldName string, factoryFunction FactoryFunction) *Factory[T] {
-	factory.validateFieldName(fieldName)
-	factory.fields[fieldName] = factoryFunction
-	return factory
-}
-
-// Build creates an instance of the factory's model.
-func (factory Factory[T]) Build() T {
+// Build creates an instance of the factory's model struct.
+// Build takes an optional map object of overrides.
+// Overrides is a map of field names (keys) and values. Overrides take priority over defaults and faker data.
+func (factory Factory[T]) Build(overrides ...map[string]any) T {
 	modelType := reflect.TypeOf(factory.model)
 	model := reflect.Zero(modelType).Interface().(T)
 	if fakerErr := faker.FakeData(&model); fakerErr != nil {
-		panic(fmt.Sprintf("error generating fake data: %s", fakerErr.Error()))
+		panic(fmt.Errorf("error generating fake data: %w", fakerErr).Error())
 	}
-
-	return model
-}
-
-func (factory Factory[T]) BuildWithOverrides(overrides map[string]any) T {
-	model := factory.Build()
-	if overrides != nil {
-		for key, value := range overrides {
+	for key, value := range factory.defaults {
+		field := reflect.ValueOf(&model).Elem().FieldByName(key)
+		if field.IsValid() && field.CanSet() {
+			field.Set(reflect.ValueOf(value))
+		}
+	}
+	if len(overrides) > 0 {
+		for key, value := range overrides[0] {
 			field := reflect.ValueOf(&model).Elem().FieldByName(key)
 			if field.IsValid() && field.CanSet() {
 				field.Set(reflect.ValueOf(value))
@@ -89,54 +72,41 @@ func (factory Factory[T]) BuildWithOverrides(overrides map[string]any) T {
 	return model
 }
 
-func (factory Factory[T]) Batch(size int) []T {
-	batch := make([]T, size, size)
-	for size > 0 {
-		batch = append(batch, factory.Build())
+// Batch builds a slice of the factory's model of a given size.
+// Batch takes an optional map object of overrides.
+// Overrides is a map of field names (keys) and values. Overrides take priority over defaults and faker data.
+func (factory Factory[T]) Batch(size int, overrides ...map[string]any) []T {
+	var batch []T
+	for i := 0; i < size; i++ {
+		batch = append(batch, factory.Build(overrides...))
 	}
 	return batch
 }
 
-func (factory Factory[T]) BatchWithOverrides(size int, overrides map[string]any) []T {
-	batch := make([]T, size, size)
-	for size > 0 {
-		batch = append(batch, factory.BuildWithOverrides(overrides))
+// Create builds an instance of the factory's model struct and persists it using the factory's persistence handler.
+// If not persistence handler is defined for the factory, Create will panic.
+// Create takes an optional map object of overrides.
+// Overrides is a map of field names (keys) and values. Overrides take priority over defaults and faker data.
+func (factory Factory[T]) Create(overrides ...map[string]any) T {
+	if factory.persistenceHandler == nil {
+		panic("cannot call .Create on a factory without a persistence handler")
 	}
+	instance := factory.Build(overrides...)
+	return factory.persistenceHandler(instance)
+}
+
+// CreateBatch builds a slice of the factory's model of a given size and persists these using the factory's persistence handler.
+// CreateBatch takes an optional map object of overrides.
+// Overrides is a map of field names (keys) and values. Overrides take priority over defaults and faker data.
+func (factory Factory[T]) CreateBatch(size int, overrides ...map[string]any) []T {
+	if factory.persistenceHandler == nil {
+		panic("cannot call .CreateBatch on a factory without a persistence handler")
+	}
+
+	var batch []T
+	for _, instance := range factory.Batch(size, overrides...) {
+		batch = append(batch, factory.persistenceHandler(instance))
+	}
+
 	return batch
-}
-
-func (factory Factory[T]) Create() T {
-	if factory.persistenceHandler == nil {
-		panic("cannot call .Create on a factory without a persistence handler")
-	}
-	persistenceHandler := *factory.persistenceHandler
-	instance := factory.Build()
-	return persistenceHandler.Save(instance)
-}
-
-func (factory Factory[T]) CreateWithOverrides(overrides map[string]any) T {
-	if factory.persistenceHandler == nil {
-		panic("cannot call .Create on a factory without a persistence handler")
-	}
-	persistenceHandler := *factory.persistenceHandler
-	instance := factory.BuildWithOverrides(overrides)
-	return persistenceHandler.Save(instance)
-}
-
-func (factory Factory[T]) CreateBatch(size int) []T {
-	if factory.persistenceHandler == nil {
-		panic("cannot call .Create on a factory without a persistence handler")
-	}
-	persistenceHandler := *factory.persistenceHandler
-	batch := factory.Batch(size)
-	return persistenceHandler.SaveMany(batch)
-}
-
-func (factory Factory[T]) CreateBatchWithOverrides(size int, overrides map[string]any) []T {
-	if factory.persistenceHandler == nil {
-		panic("cannot call .Create on a factory without a persistence handler")
-	}
-	persistenceHandler := *factory.persistenceHandler
-	batch := factory.BatchWithOverrides(size, overrides)
-	return persistenceHandler.SaveMany(batch)
 }
