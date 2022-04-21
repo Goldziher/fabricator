@@ -2,8 +2,9 @@ package fabricator
 
 import (
 	"fmt"
-	"github.com/bxcodec/faker/v3"
 	"reflect"
+
+	"github.com/bxcodec/faker/v3"
 )
 
 type PersistenceHandler[T any] interface {
@@ -14,15 +15,57 @@ type PersistenceHandler[T any] interface {
 type Factory[T any] struct {
 	model              T
 	persistenceHandler *PersistenceHandler[T]
+	fields             map[string]FactoryFunction
+	defaults           map[string]any
+	settableFields     []string
 }
 
-func New[T any](model T, persistenceHandler *PersistenceHandler[T]) Factory[T] {
+type FactoryFunction func(iteration int) any
+
+// New creates a factory for a model T. Can be extended with a persistenceHandler.
+func New[T any](model T) *Factory[T] {
 	if modelType := reflect.TypeOf(model); modelType.Kind() == reflect.Struct {
-		return Factory[T]{model: model, persistenceHandler: persistenceHandler}
+		settableFields := make([]string, 0)
+		for i := 0; i < modelType.NumField(); i++ {
+			field := modelType.Field(i)
+			if field.IsExported() {
+				settableFields = append(settableFields, field.Name)
+			}
+		}
+		factory := Factory[T]{
+			model:          model,
+			fields:         make(map[string]FactoryFunction),
+			defaults:       make(map[string]any),
+			settableFields: settableFields,
+		}
+
+		return &factory
 	}
 	panic("unsupported value: model must be a struct")
 }
 
+func (factory *Factory[T]) validateFieldName(fieldName string) {
+	for _, settableFieldName := range factory.settableFields {
+		if fieldName == settableFieldName {
+			return
+		}
+	}
+	panic(fmt.Sprintf("%s is either incorrect or does not correlate with a settable field", fieldName))
+}
+
+// SetPersistenceHandler sets the factory's persistence handler to the passed in value.
+func (factory *Factory[T]) SetPersistenceHandler(persistenceHandler PersistenceHandler[T]) *Factory[T] {
+	factory.persistenceHandler = &persistenceHandler
+	return factory
+}
+
+func (factory *Factory[T]) FieldBuilder(fieldName string, factoryFunction FactoryFunction) *Factory[T] {
+	factory.validateFieldName(fieldName)
+	factory.fields[fieldName] = factoryFunction
+	return factory
+}
+
+// Build creates an instance of the factory's model.
 func (factory Factory[T]) Build() T {
 	modelType := reflect.TypeOf(factory.model)
 	model := reflect.Zero(modelType).Interface().(T)
