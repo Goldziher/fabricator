@@ -7,6 +7,8 @@ import (
 	"github.com/bxcodec/faker/v3"
 )
 
+type FactoryFunction func(iteration int, fieldName string) any
+
 type PersistenceHandler[T any] func(instance T) T
 
 type Options[T any] struct {
@@ -18,6 +20,7 @@ type Factory[T any] struct {
 	model              T
 	persistenceHandler PersistenceHandler[T]
 	defaults           map[string]any
+	counter            int
 }
 
 // New creates a factory for a struct of type T, receives an optional Options object.
@@ -46,6 +49,21 @@ func New[T any](model T, opts ...Options[T]) *Factory[T] {
 	return &factory
 }
 
+func setFieldValueIfValid[T any](model *T, iteration int, key string, value any) {
+	field := reflect.ValueOf(model).Elem().FieldByName(key)
+	if field.IsValid() && field.CanSet() {
+		if factoryFunction, isFactoryFunction := value.(FactoryFunction); isFactoryFunction {
+			field.Set(reflect.ValueOf(factoryFunction(iteration, key)))
+		}
+		field.Set(reflect.ValueOf(value))
+	}
+}
+
+// ResetCounter resets the factory internal counter to 0.
+func (factory Factory[T]) ResetCounter() {
+	factory.counter = 0
+}
+
 // Build creates an instance of the factory's model struct.
 // Build takes an optional map object of overrides.
 // Overrides is a map of field names (keys) and values. Overrides take priority over defaults and faker data.
@@ -56,19 +74,14 @@ func (factory Factory[T]) Build(overrides ...map[string]any) T {
 		panic(fmt.Errorf("error generating fake data: %w", fakerErr).Error())
 	}
 	for key, value := range factory.defaults {
-		field := reflect.ValueOf(&model).Elem().FieldByName(key)
-		if field.IsValid() && field.CanSet() {
-			field.Set(reflect.ValueOf(value))
-		}
+		setFieldValueIfValid(&model, factory.counter, key, value)
 	}
 	if len(overrides) > 0 {
 		for key, value := range overrides[0] {
-			field := reflect.ValueOf(&model).Elem().FieldByName(key)
-			if field.IsValid() && field.CanSet() {
-				field.Set(reflect.ValueOf(value))
-			}
+			setFieldValueIfValid(&model, factory.counter, key, value)
 		}
 	}
+	factory.counter++
 	return model
 }
 
