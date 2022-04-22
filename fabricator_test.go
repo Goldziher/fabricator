@@ -2,6 +2,7 @@ package fabricator_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/Goldziher/fabricator"
 	"github.com/stretchr/testify/assert"
@@ -13,7 +14,7 @@ type Pet struct {
 }
 
 type Person struct {
-	Id          int
+	Id          int `faker:"oneof: 1, 2, 3, 4, 5, 6"`
 	FirstName   string
 	LastName    string
 	Pets        []Pet
@@ -173,18 +174,30 @@ func TestFactory_Batch(t *testing.T) {
 	})
 }
 
+type TestPersistenceHandler[T any] struct {
+	ResultHandler func(...T)
+}
+
+func (handler TestPersistenceHandler[T]) Save(instance T) T {
+	handler.ResultHandler(instance)
+	return instance
+}
+
+func (handler TestPersistenceHandler[T]) SaveMany(instances []T) []T {
+	handler.ResultHandler(instances...)
+	return instances
+}
+
 func TestFactory_Create(t *testing.T) {
 	t.Run("Success Scenario", func(t *testing.T) {
 		var result Person
-
+		handler := TestPersistenceHandler[Person]{ResultHandler: func(instances ...Person) {
+			result = instances[0]
+		}}
 		factory := fabricator.New[Person](Person{}, fabricator.Options[Person]{
-			PersistenceHandler: func(instance Person) Person {
-				result = instance
-				return instance
-			},
+			PersistenceHandler: handler,
 		})
 		person := factory.Create()
-
 		assert.NotNil(t, result)
 		assert.Equal(t, person, result)
 		assert.IsType(t, Person{}, person)
@@ -205,12 +218,11 @@ func TestFactory_Create(t *testing.T) {
 func TestFactory_CreateBatch(t *testing.T) {
 	t.Run("Success Scenario", func(t *testing.T) {
 		var results []Person
-
+		handler := TestPersistenceHandler[Person]{ResultHandler: func(instances ...Person) {
+			results = instances
+		}}
 		factory := fabricator.New[Person](Person{}, fabricator.Options[Person]{
-			PersistenceHandler: func(instance Person) Person {
-				results = append(results, instance)
-				return instance
-			},
+			PersistenceHandler: handler,
 		})
 
 		people := factory.CreateBatch(5)
@@ -224,4 +236,52 @@ func TestFactory_CreateBatch(t *testing.T) {
 			_ = factory.CreateBatch(5)
 		})
 	})
+}
+
+func TestFactoryCounter(t *testing.T) {
+	t.Run("Test Counter (regular)", func(t *testing.T) {
+		factory := fabricator.New(Person{})
+		for i := 0; i < 5; i++ {
+			assert.Equal(t, i, factory.GetCounter())
+			_ = factory.Build()
+		}
+	})
+	t.Run("Test Counter (go routines)", func(t *testing.T) {
+		factory := fabricator.New(Person{})
+		for i := 0; i < 5; i++ {
+			go func() { _ = factory.Build() }()
+		}
+		time.Sleep(time.Millisecond * 10)
+		assert.Equal(t, 5, factory.GetCounter())
+	})
+	t.Run("Test Counter Reset", func(t *testing.T) {
+		factory := fabricator.New(Person{})
+		assert.Equal(t, 0, factory.GetCounter())
+		_ = factory.Build()
+		assert.Equal(t, 1, factory.GetCounter())
+		factory.ResetCounter()
+		assert.Equal(t, 0, factory.GetCounter())
+	})
+	t.Run("Test Set Counter", func(t *testing.T) {
+		factory := fabricator.New(Person{})
+		assert.Equal(t, 0, factory.GetCounter())
+		factory.SetCounter(100)
+		assert.Equal(t, 100, factory.GetCounter())
+	})
+}
+
+func TestFactoryFunction(t *testing.T) {
+	factory := fabricator.New(Person{}, fabricator.Options[Person]{
+		Defaults: map[string]any{
+			"Id": func(iteration int, fieldName string) interface{} {
+				assert.Equal(t, "Id", fieldName)
+				return iteration + 1
+			},
+		},
+	})
+	batch := factory.Batch(5)
+
+	for i, person := range batch {
+		assert.Equal(t, i+1, person.Id)
+	}
 }
