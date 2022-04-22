@@ -274,12 +274,48 @@ Note: You can pass to batch overrides the same as you can for build
 If a factory defines a [Persistence Handler](#persistence-handler) you can use `.Create` to build and persist a model
 instance. Create is identical to `.Build` in terms of its API.
 
+```golang
+package test_something
+
+import (
+	"testing"
+
+	"github/someName/testhelpers"
+)
+
+func TestSomething(t *testing.T) {
+	person := testhelpers.PersonFactory.Create() // person is persisted using the PersistanceHandler's .Save method
+	// ...
+}
+```
+
 ### CreateBatch
 
 `func (factory *Factory[T]) CreateBatch(size int, overrides ...map[string]any) []T`
 
 If a factory defines a [Persistence Handler](#persistence-handler) you can use `.CreateBatch` to build and persist a
-slice of model instances of a given size. CreateBatch is identical to `.Batch` in terms of its API.
+slice of model instances of a given size. CreateBatch is identical to `.Batch` in terms of its API:
+
+```golang
+package test_something
+
+import (
+	"testing"
+
+	"github/someName/testhelpers"
+)
+
+func TestSomething(t *testing.T) {
+	people := testhelpers.PersonFactory.CreateBatch(5) // person is persisted using the PersistanceHandler's .SaveMany method
+	// ...
+}
+```
+
+## Using Struct Tags
+
+Fabricator uses the excellent [faker](https://github.com/bxcodec/faker) library to generate mock data. As such, you can
+use the faker struct tags to control the data generation, please consult the documentation for that library to see the
+available tags.
 
 ## Contribution
 
