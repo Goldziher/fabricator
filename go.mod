@@ -1,10 +1,12 @@
 module github.com/Goldziher/fabricator
 
-go 1.18
+go 1.21
 
 require github.com/stretchr/testify v1.7.1
 
-require github.com/bxcodec/faker/v3 v3.8.0
+require github.com/go-faker/faker/v4 v4.1.1
+
+require golang.org/x/text v0.12.0 // indirect
 
 require (
 	// indirect
