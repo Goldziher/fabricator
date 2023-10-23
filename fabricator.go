@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/go-faker/faker/v4"
+	"github.com/go-faker/faker/v4/pkg/options"
 )
 
 type PersistenceHandler[T any] interface {
@@ -16,6 +17,7 @@ type PersistenceHandler[T any] interface {
 type Options[T any] struct {
 	PersistenceHandler PersistenceHandler[T]
 	Defaults           map[string]any
+	FakerOptions       []options.OptionFunc
 }
 
 type Factory[T any] struct {
@@ -23,6 +25,7 @@ type Factory[T any] struct {
 	model              T
 	persistenceHandler PersistenceHandler[T]
 	defaults           map[string]any
+	fakerOpts          []options.OptionFunc
 	counter            int
 }
 
@@ -37,16 +40,19 @@ func New[T any](model T, opts ...Options[T]) *Factory[T] {
 
 	var defaults map[string]any
 	var handler PersistenceHandler[T]
+	var fakerOpts []options.OptionFunc
 
 	if len(opts) > 0 {
 		defaults = opts[0].Defaults
 		handler = opts[0].PersistenceHandler
+		fakerOpts = opts[0].FakerOptions
 	}
 
 	factory := Factory[T]{
 		model:              model,
 		defaults:           defaults,
 		persistenceHandler: handler,
+		fakerOpts:          fakerOpts,
 	}
 
 	return &factory
@@ -85,7 +91,7 @@ func (factory *Factory[T]) SetCounter(value int) {
 func (factory *Factory[T]) Build(overrides ...map[string]any) T {
 	modelType := reflect.TypeOf(factory.model)
 	model := reflect.Zero(modelType).Interface().(T)
-	if fakerErr := faker.FakeData(&model); fakerErr != nil {
+	if fakerErr := faker.FakeData(&model, factory.fakerOpts...); fakerErr != nil {
 		panic(fmt.Errorf("error generating fake data: %w", fakerErr).Error())
 	}
 	for key, value := range factory.defaults {
