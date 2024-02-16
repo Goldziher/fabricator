@@ -108,7 +108,11 @@ func (factory *Factory[T]) Build(overrides ...map[string]any) T {
 func (factory *Factory[T]) Batch(size int, overrides ...map[string]any) []T {
 	var batch []T
 	for i := 0; i < size; i++ {
-		batch = append(batch, factory.Build(overrides...))
+		if len(overrides) > i {
+			batch = append(batch, factory.Build(overrides[i]))
+		} else {
+			batch = append(batch, factory.Build())
+		}
 	}
 	return batch
 }

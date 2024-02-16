@@ -147,30 +147,57 @@ func TestFactory_Batch(t *testing.T) {
 	})
 	t.Run("Test .Build overrides", func(t *testing.T) {
 		factory := fabricator.New(Person{})
-		people := factory.Batch(5, map[string]interface{}{
-			"FirstName": "Moishe",
-			"LastName":  "Zuchmir",
-			"Pets": []Pet{
-				{
-					"Flippy",
-					"Dolphin",
+		people := factory.Batch(2,
+			map[string]interface{}{
+				"FirstName": "Moishe",
+				"LastName":  "Zuchmir",
+				"Pets": []Pet{
+					{
+						"Flippy",
+						"Dolphin",
+					},
 				},
 			},
-		})
-		assert.Len(t, people, 5)
-		for _, person := range people {
-			assert.IsType(t, Person{}, person)
-			assert.NotZero(t, person.Id)
-			assert.NotZero(t, person.FavoritePet)
-			assert.Len(t, person.Pets, 1)
+			map[string]interface{}{
+				"FirstName": "Chu",
+				"LastName":  "Truong",
+				"Pets": []Pet{
+					{
+						"Sii",
+						"Dog",
+					},
+				},
+			},
+		)
 
-			assert.Equal(t, person.FirstName, "Moishe")
-			assert.Equal(t, person.LastName, "Zuchmir")
-
-			pet := person.Pets[0]
-			assert.Equal(t, pet.Name, "Flippy")
-			assert.Equal(t, pet.Species, "Dolphin")
+		if len(people) != 2 {
+			t.Fatalf("Cannot batch people with size of %d as expected", 2)
 		}
+		firstPerson := people[0]
+		assert.IsType(t, Person{}, firstPerson)
+		assert.NotZero(t, firstPerson.Id)
+		assert.NotZero(t, firstPerson.FavoritePet)
+		assert.Len(t, firstPerson.Pets, 1)
+
+		assert.Equal(t, firstPerson.FirstName, "Moishe")
+		assert.Equal(t, firstPerson.LastName, "Zuchmir")
+
+		pet := firstPerson.Pets[0]
+		assert.Equal(t, pet.Name, "Flippy")
+		assert.Equal(t, pet.Species, "Dolphin")
+
+		secondPerson := people[1]
+		assert.IsType(t, Person{}, secondPerson)
+		assert.NotZero(t, secondPerson.Id)
+		assert.NotZero(t, secondPerson.FavoritePet)
+		assert.Len(t, secondPerson.Pets, 1)
+
+		assert.Equal(t, secondPerson.FirstName, "Chu")
+		assert.Equal(t, secondPerson.LastName, "Truong")
+
+		pet = secondPerson.Pets[0]
+		assert.Equal(t, pet.Name, "Sii")
+		assert.Equal(t, pet.Species, "Dog")
 	})
 }
 
