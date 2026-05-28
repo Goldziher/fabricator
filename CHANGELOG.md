@@ -43,7 +43,7 @@ Fabricator v2 is a breaking generics-first redesign and uses the Go module path 
 - Updated the project to Go 1.26.
 - Updated `github.com/go-faker/faker/v4` to v4.7.0.
 - Updated `github.com/stretchr/testify` to v1.11.1.
-- Updated CI to current GitHub Actions majors, including `actions/checkout@v6`, `actions/upload-artifact@v7`, CodeQL v4, and SonarQube scan action v8.
+- Updated CI to current GitHub Actions majors, including `actions/checkout@v6`, `actions/upload-artifact@v7`, and CodeQL v4.
 
 ## v1.1.1 - 2024-02-16
 

@@ -85,25 +85,3 @@ jobs:
           languages: go
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
-
-  sonarcloud:
-    needs:
-      - analyze
-      - lint
-      - maintenance
-      - test
-    name: SonarCloud
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-      - name: Download coverage report
-        uses: actions/download-artifact@v4
-        with:
-          name: coverage-report
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarqube-scan-action@v8
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
