@@ -1,10 +1,12 @@
 # Contributing
 
-To contribute code changes or update the documentation, please follow these steps:
+To contribute code or documentation changes:
 
-1. Fork the upstream repository and clone the fork locally.
-2. Install [pre-commit](https://pre-commit.com/) and install the hook by running `pre-commit install`
-3. Make whatever changes and additions you wish and commit these - please try to keep your commit history clean.
-4. Create a pull request to the main repository with an explanation of your changes
+1. Fork the upstream repository and clone your fork locally.
+2. Install Go 1.26, Task, and Homebrew `prek`.
+3. Run `task setup` to install Go tooling and Git hooks.
+4. Make focused changes with tests.
+5. Run `task check`, `task test:race`, and `task lint`.
+6. Open a pull request with a clear explanation of the change.
 
-Note: if you add new code or modify existing code - 100% test coverage is mandatory and tests should be well written.
+New behavior should include meaningful tests. The project aims for high coverage, but correctness, failure-path coverage, and maintainable tests matter more than a mechanical 100% target.

@@ -1,4 +1,4 @@
-module github.com/Goldziher/fabricator
+module github.com/Goldziher/fabricator/v2
 
 go 1.26
 

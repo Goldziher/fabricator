@@ -1,8 +1,9 @@
 .idea/
 node_modules/
+coverage.out
+.ai-rulez/.generated-manifest.json
 
 # BEGIN ai-rulez (DO NOT EDIT - managed by ai-rulez)
-.ai-rulez/.generated-manifest.json
 .agents/agents/code-reviewer.md
 .agents/agents/docs-writer.md
 .agents/agents/security-auditor.md

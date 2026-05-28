@@ -15,7 +15,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -25,7 +25,7 @@ jobs:
       - name: Run race tests
         run: go test -race ./...
       - name: Archive coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: coverage.out
@@ -33,7 +33,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -43,6 +43,30 @@ jobs:
         with:
           version: v2.12.2
 
+  maintenance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+      - name: Install maintenance tools
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          cargo install prek --version 0.4.3
+      - name: Run go vet
+        run: go vet ./...
+      - name: Run govulncheck
+        run: govulncheck ./...
+      - name: Validate ai-rulez
+        run: npx -y ai-rulez@latest validate
+      - name: Run prek hooks
+        run: prek run --all-files
+
   analyze:
     runs-on: ubuntu-latest
     permissions:
@@ -50,27 +74,28 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: go
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
 
   sonarcloud:
     needs:
       - analyze
       - lint
+      - maintenance
       - test
     name: SonarCloud
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - name: Download coverage report
@@ -78,7 +103,7 @@ jobs:
         with:
           name: coverage-report
       - name: SonarCloud Scan
-        uses: SonarSource/sonarqube-scan-action@v6
+        uses: SonarSource/sonarqube-scan-action@v8
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
