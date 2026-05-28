@@ -1,41 +1,104 @@
-linters-settings:
-  govet:
-    check-shadowing: true
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
 linters:
+  default: none
   enable:
-    - bidichk
-    - deadcode
-    - durationcheck
+    - bodyclose
+    - copyloopvar
     - errcheck
     - errorlint
-    - exportloopref
-    - goimports
     - goconst
     - gocritic
-    - godot
-    - godox
-    - goheader
-    - gomoddirectives
-    - gomodguard
-    - goprintffuncname
     - gosec
-    - ineffassign
-    - gosimple
     - govet
+    - ineffassign
+    - misspell
+    - modernize
+    - nilerr
     - nolintlint
-    - predeclared
-    - rowserrcheck
-    - sqlclosecheck
+    - revive
     - staticcheck
-    - structcheck
-    - tenv
-    - testpackage
-    - typecheck
+    - testifylint
     - unconvert
-    - unparam
     - unused
-    - varcheck
-    - wastedassign
     - whitespace
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+        - style
+      disabled-checks:
+        - whyNoLint
+
+    gosec:
+      excludes:
+        - G101
+
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+        - shadow
+
+    misspell:
+      locale: US
+
+    revive:
+      confidence: 0.8
+      severity: warning
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: exported
+          disabled: true
+        - name: if-return
+        - name: increment-decrement
+        - name: package-comments
+          disabled: true
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: var-declaration
+        - name: var-naming
+
+  exclusions:
+    generated: lax
+    rules:
+      - path: _test\.go
+        linters:
+          - bodyclose
+          - goconst
+          - gosec
+          - gocritic
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
 issues:
-  fix: true
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  uniq-by-line: true

@@ -1,29 +1,54 @@
-default_stages: [commit]
+default_install_hook_types:
+  - pre-commit
+  - commit-msg
+default_stages:
+  - pre-commit
+exclude: ^vendor/|node_modules/|dist/|build/
+
 repos:
-  - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
-    rev: "v9.11.0"
+  - repo: https://github.com/Goldziher/gitfluff
+    rev: v0.8.0
     hooks:
-      - id: commitlint
+      - id: gitfluff-lint
+        args: ["--write"]
         stages: [commit-msg]
-        additional_dependencies: ["@commitlint/config-conventional"]
+
+  - repo: https://github.com/Goldziher/ai-rulez
+    rev: v4.2.2
+    hooks:
+      - id: ai-rulez-generate
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: "v4.5.0"
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
-      - id: check-yaml
+      - id: check-merge-conflict
       - id: check-added-large-files
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: "v4.0.0-alpha.8"
+      - id: detect-private-key
+      - id: check-json
+      - id: check-yaml
+        args: ["--allow-multiple-documents", "--unsafe"]
+      - id: check-toml
+      - id: check-case-conflict
+
+  - repo: https://github.com/kreuzberg-dev/pre-commit-hooks
+    rev: v1.2.3
     hooks:
-      - id: prettier
-        exclude: "go.mod"
-  - repo: https://github.com/golangci/golangci-lint
-    rev: "v1.56.2"
-    hooks:
+      - id: go-fmt
       - id: golangci-lint
-        args: ["--timeout", "3m0s"]
-  - repo: https://github.com/segmentio/golines
-    rev: "v0.12.2"
+      - id: govulncheck
+      - id: shfmt
+        args: ["-w", "-i", "2"]
+      - id: shellcheck
+      - id: rumdl-fmt
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
     hooks:
-      - id: golines
+      - id: actionlint
+
+  - repo: https://github.com/Goldziher/gh-actions-updater
+    rev: v0.1.5
+    hooks:
+      - id: gh-actions-updater

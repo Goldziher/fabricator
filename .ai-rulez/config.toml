@@ -1,0 +1,34 @@
+version = "4.0"
+name = "Fabricator"
+description = "Generics-first Go test data factory library."
+gitignore = true
+
+presets = [
+  "claude",
+  "cursor",
+  "gemini",
+  "windsurf",
+  "copilot",
+  "continue-dev",
+  "amp",
+  "cline",
+  "codex",
+  "opencode",
+  "junie",
+  "antigravity",
+]
+
+builtins = [
+  "go",
+  "security",
+  "git-workflow",
+  "code-quality",
+  "testing",
+  "default-commands",
+]
+
+[[mcp_servers]]
+name = "ai-rulez"
+description = "Expose generation and enforcement to MCP-aware tools."
+command = "npx"
+args = ["-y", "ai-rulez@latest", "mcp"]

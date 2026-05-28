@@ -1,4 +1,5 @@
 name: ci
+
 on:
   pull_request:
     branches:
@@ -6,28 +7,43 @@ on:
   push:
     branches:
       - main
+
+permissions:
+  contents: read
+
 jobs:
-  setup:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
-      - name: Load cached dependencies
-        id: cached-go-dependencies
-        uses: actions/cache@v4
+          go-version-file: go.mod
+          cache: true
+      - name: Run tests
+        run: go test -coverprofile=coverage.out ./...
+      - name: Run race tests
+        run: go test -race ./...
+      - name: Archive coverage report
+        uses: actions/upload-artifact@v4
         with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-${{ inputs.go_version }}-v1.0-${{ hashFiles('**/go.sum') }}
-      - name: Install dependencies
-        if: steps.cached-go-dependencies.outputs.cache-hit != 'true'
-        shell: bash
-        run: go get -v -t ./...
+          name: coverage-report
+          path: coverage.out
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12.2
+
   analyze:
-    needs: setup
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -37,96 +53,32 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
-      - name: Load cached dependencies
-        id: cached-go-dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-${{ inputs.go_version }}-v1.0-${{ hashFiles('**/go.sum') }}
-      - name: Install dependencies
-        if: steps.cached-go-dependencies.outputs.cache-hit != 'true'
-        shell: bash
-        run: go get -v -t ./...
+          go-version-file: go.mod
+          cache: true
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: go
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
-  lint:
-    needs: setup
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.22"
-      - name: Load cached dependencies
-        id: cached-go-dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-${{ inputs.go_version }}-v1.0-${{ hashFiles('**/go.sum') }}
-      - name: Install dependencies
-        if: steps.cached-go-dependencies.outputs.cache-hit != 'true'
-        shell: bash
-        run: go get -v -t ./...
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v4
-        continue-on-error: true
-        with:
-          version: v1.53
-          skip-go-installation: true
-          skip-pkg-cache: true
-          skip-build-cache: true
-  test:
-    needs: setup
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.22"
-      - name: Load cached dependencies
-        id: cached-go-dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: go-${{ inputs.go_version }}-v1.0-${{ hashFiles('**/go.sum') }}
-      - name: Install dependencies
-        if: steps.cached-go-dependencies.outputs.cache-hit != 'true'
-        shell: bash
-        run: go get -v -t ./...
-      - name: Run Tests
-        run: go test -coverprofile=coverage.out ./...
-      - name: Archive code coverage results
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: ./coverage.out
+
   sonarcloud:
-    needs: [test, lint, analyze]
+    needs:
+      - analyze
+      - lint
+      - test
     name: SonarCloud
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Download Coverage Report
+      - name: Download coverage report
         uses: actions/download-artifact@v4
         with:
           name: coverage-report
       - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@master
+        uses: SonarSource/sonarqube-scan-action@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

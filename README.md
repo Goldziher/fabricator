@@ -11,312 +11,144 @@
 
 </div>
 
-Fabricator is a library for test data generation using structs and Go 1.18 generics. Its API is inspired by similar
-libraries in other languages (e.g. [Pydantic-Factories](https://github.com/Goldziher/pydantic-factories)
-, [Interface-Forge](https://github.com/Goldziher/interface-forge)), which was not possible in Go before the introduction
-of generics.
+Fabricator is a generics-first Go library for building typed test data factories.
 
 ## Installation
 
 ```shell
-go get -u github.com/Goldziher/fabricator
+go get github.com/Goldziher/fabricator
 ```
 
-## Example
+## Basic Usage
 
-```golang
+```go
 package some_test
 
 import (
 	"testing"
 
 	"github.com/Goldziher/fabricator"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-type Pet struct {
-	Name    string
-	Species string
-}
-
 type Person struct {
-	Id          int
-	FirstName   string
-	LastName    string
-	Pets        []Pet
-	FavoritePet Pet
+	ID        int
+	FirstName string
+	LastName  string
 }
-
-var personFactory = fabricator.New[Person](Person{})
 
 func TestSomething(t *testing.T) {
-	personInstance := personFactory.Build()
-	assert.IsType(t, Person{}, personInstance)
-	assert.NotZero(t, personInstance.Id)
-	assert.NotZero(t, personInstance.FirstName)
-	assert.NotZero(t, personInstance.LastName)
-	assert.NotZero(t, personInstance.Pets)
-	assert.NotZero(t, personInstance.FavoritePet)
+	factory := fabricator.New(
+		Person{},
+		fabricator.Value[Person]("FirstName", "Moishe"),
+		fabricator.Field[Person]("ID", func(ctx fabricator.BuildContext) int {
+			return ctx.Iteration + 1
+		}),
+	)
+
+	person := factory.Build(fabricator.Override[Person]("LastName", "Zuchmir"))
+
+	require.Equal(t, 1, person.ID)
+	require.Equal(t, "Moishe", person.FirstName)
+	require.Equal(t, "Zuchmir", person.LastName)
 }
 ```
 
-## Defining Factories
+## Typed Fields
 
-Defining a factory is very simple. Let's assume our app has a package called `types` where we define some struct, and
-another package called `testhelpers` where we have some shared testing utilities.
+Factory customization uses typed options:
 
-```golang
-package types
+```go
+factory := fabricator.New(
+	Person{},
+	fabricator.Value[Person]("FirstName", "Moishe"),
+	fabricator.Field[Person]("LastName", func(ctx fabricator.BuildContext) string {
+		return "user-" + strconv.Itoa(ctx.Iteration)
+	}),
+)
+```
 
+`BuildContext` exposes the current `Iteration` and `FieldName`. Overrides use the same typed model:
+
+```go
+person := factory.Build(
+	fabricator.Override[Person]("FirstName", "Chu"),
+	fabricator.OverrideField[Person]("LastName", func(ctx fabricator.BuildContext) string {
+		return fmt.Sprintf("Truong-%d", ctx.Iteration)
+	}),
+)
+```
+
+The old `map[string]any` defaults and overrides API has been removed. Invalid fields or values with incompatible types panic with explicit messages.
+
+## Subfactories
+
+Nested factories are first-class providers:
+
+```go
 type Pet struct {
 	Name    string
 	Species string
 }
 
 type Person struct {
-	Id          int
-	FirstName   string
-	LastName    string
+	FavoritePet *Pet
 	Pets        []Pet
-	FavoritePet Pet
 }
-```
 
-Since factories can be reused, it's a good idea to define them in a specific package from which they can be imported. In
-the case of our imaginary app, this will be the `testhelpers` package:
-
-```golang
-package testhelpers
-
-import (
-	"github.com/Goldziher/fabricator"
-
-	"github/someName/types"
+petFactory := fabricator.New(
+	Pet{},
+	fabricator.Value[Pet]("Name", "Flippy"),
+	fabricator.Value[Pet]("Species", "Dolphin"),
 )
 
-var PersonFactory = fabricator.New[types.Person](types.Person{})
-```
-
-Note: If we have use for a Pet without its nesting inside Person, we might also want to define a PetFactory, but this is
-not required in this example, since a slice of pets will be generated inside the `PersonFactory`.
-
-We could also pass an options object when defining the factory, setting the factory's `Defaults` and
-a `PersistenceHandler` function.
-
-### Factory Defaults
-
-```golang
-package testhelpers
-
-import (
-	"github.com/Goldziher/fabricator"
-
-	"github/someName/types"
+personFactory := fabricator.New(
+	Person{},
+	fabricator.Field[Person]("FavoritePet", fabricator.PtrSubfactory(petFactory)),
+	fabricator.Field[Person]("Pets", fabricator.SliceSubfactory(petFactory, 2)),
 )
-
-var PersonFactory = fabricator.New[types.Person](types.Person{}, fabricator.Options[types.Person]{
-	Defaults: map[string]any{
-		"FirstName": "Moishe",
-		"LastName":  "Zuchmir",
-		"Pets": func(iteration int, fieldName string) interface{} {
-			pets := []types.Pet{}
-			if iteration%2 == 0 {
-				pets = append(pets, types.Pet{
-					"Flippy",
-					"Dolphin",
-				})
-			}
-			return pets
-		},
-	},
-})
 ```
 
-As you can see above, the factory receives a `Defaults` object that maps struct field names, as map keys, to either
-pre-specified values, or factory functions.
+Use `Subfactory` for value fields, `PtrSubfactory` for pointer fields, and `SliceSubfactory` for slices.
 
-While factory functions are more verbose, they are a powerful way to generate data and they can of course be shared
-across different fields or even different factories.
+## Faker Options
 
-The signature for a factory function is `func(iteration int, fieldName string) interface{}`, with `iteration` being the
-current value of the factory's internal counter, and `fieldName` being the name of the specific struct field for which a
-value is being generated.
+Fabricator delegates base data generation to `github.com/go-faker/faker/v4`. Pass faker options through the factory:
 
-### Persistence Handler
+```go
+factory := fabricator.New(
+	Person{},
+	fabricator.WithFakerOptions[Person](options.WithIgnoreInterface(true)),
+)
+```
 
-When defining a factory, you can pass a `PersistenceHandler`, that is, a struct conforming to
-the `fabricator.PersistenceHandler` interface:
+## Persistence
 
-```golang
-package fabricator
+`Create` and `CreateBatch` build data and pass it to a typed persistence handler:
 
+```go
 type PersistenceHandler[T any] interface {
 	Save(instance T) T
-	SaveMany(instance []T) []T
+	SaveMany(instances []T) []T
 }
-```
 
-With a persistence handler defined for the factory, you can call the `.Create` and `.CreateBatch` methods which build
-and then persist the data in one command. For example:
-
-```golang
-package testhelpers
-
-import (
-	"github.com/Goldziher/fabricator"
-
-	"github/someName/db"
-	"github/someName/types"
+factory := fabricator.New(
+	Person{},
+	fabricator.WithPersistenceHandler[Person](handler),
 )
 
-type MyPersistenceHandler[T any] struct{}
-
-func (handler MyPersistenceHandler[T]) Save(instance T) T {
-	db.Create(&instance)
-	return instance
-}
-
-func (handler MyPersistenceHandler[T]) SaveMany(instances []T) []T {
-	db.Create(&instances)
-	return instances
-}
-
-var PersonFactory = fabricator.New[types.Person](types.Person{}, fabricator.Options[types.Person]{
-	PersistenceHandler: MyPersistenceHandler[types.Person]{},
-})
+person := factory.Create()
+people := factory.CreateBatch(5)
 ```
 
-## Factory Methods
+## Development
 
-Once a factory is defined it exposes the following methods:
+This repository uses Go 1.26, golangci-lint v2, `prek`, `gitfluff`, and `ai-rulez`.
 
-### Build
-
-`func (factory *Factory[T]) Build(overrides ...map[string]any) T`
-
-Build creates a single instance of the factory's model:
-
-```golang
-package test_something
-
-import (
-	"testing"
-
-	"github/someName/testhelpers"
-)
-
-func TestSomething(t *testing.T) {
-	person := testhelpers.PersonFactory.Build()
-	// ...
-}
+```shell
+task setup
+task test
+task test:race
+task check
+task lint
 ```
-
-You can pass to build a mapping of override values, this works exactly like the factory defaults, for example:
-
-```golang
-package test_something
-
-import (
-	"testing"
-
-	"github/someName/types"
-	"github/someName/testhelpers"
-)
-
-func TestSomething(t *testing.T) {
-	person := testhelpers.PersonFactory.Build(map[string]any{
-		"FirstName": "Moishe",
-		"LastName":  "Zuchmir",
-		"Pets": func(iteration int, fieldName string) interface{} {
-			pets := []types.Pet{}
-			if iteration%2 == 0 {
-				pets = append(pets, types.Pet{
-					"Flippy",
-					"Dolphin",
-				})
-			}
-			return pets
-		},
-	})
-	// ...
-}
-```
-
-### Batch
-
-`func (factory *Factory[T]) Batch(size int, overrides ...map[string]any) []T`
-
-Batch builds a slice of instances of a given size:
-
-```golang
-package test_something
-
-import (
-	"testing"
-	"github.com/stretchr/testify/assert"
-
-	"github/someName/types"
-	"github/someName/testhelpers"
-)
-
-func TestSomething(t *testing.T) {
-	people := testhelpers.PersonFactory.Batch(5)
-	assert.Len(t, people, 5)
-}
-```
-
-Note: You can pass to batch overrides the same as you can for build
-
-### Create
-
-`func (factory *Factory[T]) Create(overrides ...map[string]any) T`
-
-If a factory defines a [Persistence Handler](#persistence-handler) you can use `.Create` to build and persist a model
-instance. Create is identical to `.Build` in terms of its API.
-
-```golang
-package test_something
-
-import (
-	"testing"
-
-	"github/someName/testhelpers"
-)
-
-func TestSomething(t *testing.T) {
-	person := testhelpers.PersonFactory.Create() // person is persisted using the PersistanceHandler's .Save method
-	// ...
-}
-```
-
-### CreateBatch
-
-`func (factory *Factory[T]) CreateBatch(size int, overrides ...map[string]any) []T`
-
-If a factory defines a [Persistence Handler](#persistence-handler) you can use `.CreateBatch` to build and persist a
-slice of model instances of a given size. CreateBatch is identical to `.Batch` in terms of its API:
-
-```golang
-package test_something
-
-import (
-	"testing"
-
-	"github/someName/testhelpers"
-)
-
-func TestSomething(t *testing.T) {
-	people := testhelpers.PersonFactory.CreateBatch(5) // person is persisted using the PersistanceHandler's .SaveMany method
-	// ...
-}
-```
-
-## Using Struct Tags
-
-Fabricator uses the excellent [faker](https://github.com/bxcodec/faker) library to generate mock data. As such, you can
-use the faker struct tags to control the data generation, please consult the documentation for that library to see the
-available tags.
-
-## Contribution
-
-This library is open to contributions. Please consult the [Contribution Guide](CONTRIBUTING.md).

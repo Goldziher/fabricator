@@ -1,11 +1,14 @@
 package fabricator_test
 
 import (
+	"sync"
 	"testing"
-	"time"
+
+	"github.com/go-faker/faker/v4/pkg/options"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/Goldziher/fabricator"
-	"github.com/stretchr/testify/assert"
 )
 
 type Pet struct {
@@ -13,192 +16,95 @@ type Pet struct {
 	Species string
 }
 
+type Profile struct {
+	Reason string
+}
+
 type Person struct {
-	Id          int `faker:"oneof: 1, 2, 3, 4, 5, 6"`
-	FirstName   string
-	LastName    string
-	Pets        []Pet
-	FavoritePet Pet
+	ID              int `faker:"oneof: 1, 2, 3, 4, 5, 6"`
+	FirstName       string
+	LastName        string
+	Pets            []Pet
+	FavoritePet     Pet
+	FavoriteProfile *Profile
+	Metadata        any
 }
 
 func TestNew(t *testing.T) {
-	t.Run("Success Scenario", func(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
 		assert.NotPanics(t, func() { _ = fabricator.New(Person{}) })
 	})
-	t.Run("Failure Scenario", func(t *testing.T) {
+
+	t.Run("failure", func(t *testing.T) {
 		assert.Panics(t, func() { _ = fabricator.New(100) })
 	})
 }
 
-func TestFactory_Build(t *testing.T) {
-	t.Run("Test .Build", func(t *testing.T) {
-		factory := fabricator.New(Person{})
+func TestFactoryBuild(t *testing.T) {
+	t.Run("faker data", func(t *testing.T) {
+		factory := fabricator.New(Person{}, fabricator.WithFakerOptions[Person](options.WithIgnoreInterface(true)))
+
 		person := factory.Build()
+
 		assert.IsType(t, Person{}, person)
-		assert.NotZero(t, person.Id)
-		assert.NotZero(t, person.FirstName)
-		assert.NotZero(t, person.LastName)
+		assert.NotZero(t, person.ID)
+		assert.NotEmpty(t, person.FirstName)
+		assert.NotEmpty(t, person.LastName)
 		assert.NotZero(t, person.Pets)
 		assert.NotZero(t, person.FavoritePet)
 	})
-	t.Run("Test .Build defaults", func(t *testing.T) {
-		factory := fabricator.New(Person{}, fabricator.Options[Person]{
-			Defaults: map[string]any{
-				"FirstName": "Moishe",
-				"LastName":  "Zuchmir",
-				"Pets": []Pet{
-					{
-						"Flippy",
-						"Dolphin",
-					},
-				},
-			},
-		})
+
+	t.Run("typed defaults", func(t *testing.T) {
+		factory := fabricator.New(
+			Person{},
+			fabricator.WithFakerOptions[Person](options.WithIgnoreInterface(true)),
+			fabricator.Value[Person]("FirstName", "Moishe"),
+			fabricator.Value[Person]("LastName", "Zuchmir"),
+			fabricator.Value[Person]("Pets", []Pet{{Name: "Flippy", Species: "Dolphin"}}),
+		)
+
 		person := factory.Build()
-		assert.IsType(t, Person{}, person)
-		assert.NotZero(t, person.Id)
-		assert.NotZero(t, person.FavoritePet)
-		assert.Len(t, person.Pets, 1)
 
-		assert.Equal(t, person.FirstName, "Moishe")
-		assert.Equal(t, person.LastName, "Zuchmir")
-
-		pet := person.Pets[0]
-		assert.Equal(t, pet.Name, "Flippy")
-		assert.Equal(t, pet.Species, "Dolphin")
+		assert.Equal(t, "Moishe", person.FirstName)
+		assert.Equal(t, "Zuchmir", person.LastName)
+		require.Len(t, person.Pets, 1)
+		assert.Equal(t, "Flippy", person.Pets[0].Name)
+		assert.Equal(t, "Dolphin", person.Pets[0].Species)
 	})
-	t.Run("Test .Build overrides", func(t *testing.T) {
-		factory := fabricator.New(Person{})
-		person := factory.Build(map[string]interface{}{
-			"FirstName": "Moishe",
-			"LastName":  "Zuchmir",
-			"Pets": []Pet{
-				{
-					"Flippy",
-					"Dolphin",
-				},
-			},
-		})
-		assert.IsType(t, Person{}, person)
-		assert.NotZero(t, person.Id)
-		assert.NotZero(t, person.FavoritePet)
-		assert.Len(t, person.Pets, 1)
 
-		assert.Equal(t, person.FirstName, "Moishe")
-		assert.Equal(t, person.LastName, "Zuchmir")
+	t.Run("typed build overrides", func(t *testing.T) {
+		factory := fabricator.New(Person{}, fabricator.WithFakerOptions[Person](options.WithIgnoreInterface(true)))
 
-		pet := person.Pets[0]
-		assert.Equal(t, pet.Name, "Flippy")
-		assert.Equal(t, pet.Species, "Dolphin")
-	})
-	t.Run("Panic Scenario", func(t *testing.T) {
-		ttype := struct {
-			Key interface{}
-		}{}
-		factory := fabricator.New(ttype)
-		assert.Panics(t, func() {
-			_ = factory.Build()
-		})
+		person := factory.Build(
+			fabricator.Override[Person]("FirstName", "Moishe"),
+			fabricator.Override[Person]("LastName", "Zuchmir"),
+			fabricator.Override[Person]("Pets", []Pet{{Name: "Flippy", Species: "Dolphin"}}),
+		)
+
+		assert.Equal(t, "Moishe", person.FirstName)
+		assert.Equal(t, "Zuchmir", person.LastName)
+		require.Len(t, person.Pets, 1)
+		assert.Equal(t, "Flippy", person.Pets[0].Name)
+		assert.Equal(t, "Dolphin", person.Pets[0].Species)
 	})
 }
 
-func TestFactory_Batch(t *testing.T) {
-	t.Run("Test .Batch", func(t *testing.T) {
-		factory := fabricator.New(Person{})
-		people := factory.Batch(5)
-		assert.Len(t, people, 5)
-		for _, person := range people {
-			assert.IsType(t, Person{}, person)
-			assert.NotZero(t, person.Id)
-			assert.NotZero(t, person.FirstName)
-			assert.NotZero(t, person.LastName)
-			assert.NotZero(t, person.Pets)
-			assert.NotZero(t, person.FavoritePet)
-		}
-	})
-	t.Run("Test .Batch defaults", func(t *testing.T) {
-		factory := fabricator.New(Person{}, fabricator.Options[Person]{
-			Defaults: map[string]any{
-				"FirstName": "Moishe",
-				"LastName":  "Zuchmir",
-				"Pets": []Pet{
-					{
-						"Flippy",
-						"Dolphin",
-					},
-				},
-			},
-		})
-		people := factory.Batch(5)
-		assert.Len(t, people, 5)
-		for _, person := range people {
-			assert.IsType(t, Person{}, person)
-			assert.NotZero(t, person.Id)
-			assert.NotZero(t, person.FavoritePet)
-			assert.Len(t, person.Pets, 1)
+func TestFactoryBatch(t *testing.T) {
+	factory := fabricator.New(
+		Person{},
+		fabricator.WithFakerOptions[Person](options.WithIgnoreInterface(true)),
+		fabricator.Field[Person]("ID", func(ctx fabricator.BuildContext) int {
+			return ctx.Iteration + 1
+		}),
+	)
 
-			assert.Equal(t, person.FirstName, "Moishe")
-			assert.Equal(t, person.LastName, "Zuchmir")
+	people := factory.Batch(5)
 
-			pet := person.Pets[0]
-			assert.Equal(t, pet.Name, "Flippy")
-			assert.Equal(t, pet.Species, "Dolphin")
-		}
-	})
-	t.Run("Test .Build overrides", func(t *testing.T) {
-		factory := fabricator.New(Person{})
-		people := factory.Batch(2,
-			map[string]interface{}{
-				"FirstName": "Moishe",
-				"LastName":  "Zuchmir",
-				"Pets": []Pet{
-					{
-						"Flippy",
-						"Dolphin",
-					},
-				},
-			},
-			map[string]interface{}{
-				"FirstName": "Chu",
-				"LastName":  "Truong",
-				"Pets": []Pet{
-					{
-						"Sii",
-						"Dog",
-					},
-				},
-			},
-		)
-
-		if len(people) != 2 {
-			t.Fatalf("Cannot batch people with size of %d as expected", 2)
-		}
-		firstPerson := people[0]
-		assert.IsType(t, Person{}, firstPerson)
-		assert.NotZero(t, firstPerson.Id)
-		assert.NotZero(t, firstPerson.FavoritePet)
-		assert.Len(t, firstPerson.Pets, 1)
-
-		assert.Equal(t, firstPerson.FirstName, "Moishe")
-		assert.Equal(t, firstPerson.LastName, "Zuchmir")
-
-		pet := firstPerson.Pets[0]
-		assert.Equal(t, pet.Name, "Flippy")
-		assert.Equal(t, pet.Species, "Dolphin")
-
-		secondPerson := people[1]
-		assert.IsType(t, Person{}, secondPerson)
-		assert.NotZero(t, secondPerson.Id)
-		assert.NotZero(t, secondPerson.FavoritePet)
-		assert.Len(t, secondPerson.Pets, 1)
-
-		assert.Equal(t, secondPerson.FirstName, "Chu")
-		assert.Equal(t, secondPerson.LastName, "Truong")
-
-		pet = secondPerson.Pets[0]
-		assert.Equal(t, pet.Name, "Sii")
-		assert.Equal(t, pet.Species, "Dog")
-	})
+	require.Len(t, people, 5)
+	for i, person := range people {
+		assert.Equal(t, i+1, person.ID)
+		assert.NotEmpty(t, person.FirstName)
+	}
 }
 
 type TestPersistenceHandler[T any] struct {
@@ -215,100 +121,176 @@ func (handler TestPersistenceHandler[T]) SaveMany(instances []T) []T {
 	return instances
 }
 
-func TestFactory_Create(t *testing.T) {
-	t.Run("Success Scenario", func(t *testing.T) {
+func TestFactoryCreate(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
 		var result Person
 		handler := TestPersistenceHandler[Person]{ResultHandler: func(instances ...Person) {
 			result = instances[0]
 		}}
-		factory := fabricator.New[Person](Person{}, fabricator.Options[Person]{
-			PersistenceHandler: handler,
-		})
+		factory := fabricator.New(
+			Person{},
+			fabricator.WithFakerOptions[Person](options.WithIgnoreInterface(true)),
+			fabricator.WithPersistenceHandler[Person](handler),
+		)
+
 		person := factory.Create()
-		assert.NotNil(t, result)
+
 		assert.Equal(t, person, result)
 		assert.IsType(t, Person{}, person)
-		assert.NotZero(t, person.Id)
-		assert.NotZero(t, person.FirstName)
-		assert.NotZero(t, person.LastName)
-		assert.NotZero(t, person.Pets)
-		assert.NotZero(t, person.FavoritePet)
+		assert.NotZero(t, person.ID)
+		assert.NotEmpty(t, person.FirstName)
 	})
-	t.Run("Panic Scenario", func(t *testing.T) {
+
+	t.Run("panic without handler", func(t *testing.T) {
 		assert.Panics(t, func() {
-			factory := fabricator.New[Person](Person{})
+			factory := fabricator.New[Person](Person{}, fabricator.WithFakerOptions[Person](options.WithIgnoreInterface(true)))
 			_ = factory.Create()
 		})
 	})
 }
 
-func TestFactory_CreateBatch(t *testing.T) {
-	t.Run("Success Scenario", func(t *testing.T) {
+func TestFactoryCreateBatch(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
 		var results []Person
 		handler := TestPersistenceHandler[Person]{ResultHandler: func(instances ...Person) {
 			results = instances
 		}}
-		factory := fabricator.New[Person](Person{}, fabricator.Options[Person]{
-			PersistenceHandler: handler,
-		})
+		factory := fabricator.New(
+			Person{},
+			fabricator.WithFakerOptions[Person](options.WithIgnoreInterface(true)),
+			fabricator.WithPersistenceHandler[Person](handler),
+		)
 
 		people := factory.CreateBatch(5)
+
 		assert.Len(t, people, 5)
 		assert.Len(t, results, 5)
 		assert.Equal(t, people, results)
 	})
-	t.Run("Panic Scenario", func(t *testing.T) {
+
+	t.Run("panic without handler", func(t *testing.T) {
 		assert.Panics(t, func() {
-			factory := fabricator.New[Person](Person{})
+			factory := fabricator.New[Person](Person{}, fabricator.WithFakerOptions[Person](options.WithIgnoreInterface(true)))
 			_ = factory.CreateBatch(5)
 		})
 	})
 }
 
 func TestFactoryCounter(t *testing.T) {
-	t.Run("Test Counter (regular)", func(t *testing.T) {
-		factory := fabricator.New(Person{})
-		for i := 0; i < 5; i++ {
+	t.Run("regular", func(t *testing.T) {
+		factory := fabricator.New(Person{}, fabricator.WithFakerOptions[Person](options.WithIgnoreInterface(true)))
+		for i := range 5 {
 			assert.Equal(t, i, factory.GetCounter())
 			_ = factory.Build()
 		}
 	})
-	t.Run("Test Counter (go routines)", func(t *testing.T) {
-		factory := fabricator.New(Person{})
-		for i := 0; i < 5; i++ {
-			go func() { _ = factory.Build() }()
+
+	t.Run("concurrent", func(t *testing.T) {
+		factory := fabricator.New(Person{}, fabricator.WithFakerOptions[Person](options.WithIgnoreInterface(true)))
+		var wg sync.WaitGroup
+		for range 5 {
+			wg.Go(func() {
+				_ = factory.Build()
+			})
 		}
-		time.Sleep(time.Millisecond * 10)
+		wg.Wait()
+
 		assert.Equal(t, 5, factory.GetCounter())
 	})
-	t.Run("Test Counter Reset", func(t *testing.T) {
-		factory := fabricator.New(Person{})
+
+	t.Run("reset", func(t *testing.T) {
+		factory := fabricator.New(Person{}, fabricator.WithFakerOptions[Person](options.WithIgnoreInterface(true)))
 		assert.Equal(t, 0, factory.GetCounter())
 		_ = factory.Build()
 		assert.Equal(t, 1, factory.GetCounter())
 		factory.ResetCounter()
 		assert.Equal(t, 0, factory.GetCounter())
 	})
-	t.Run("Test Set Counter", func(t *testing.T) {
-		factory := fabricator.New(Person{})
+
+	t.Run("set", func(t *testing.T) {
+		factory := fabricator.New(Person{}, fabricator.WithFakerOptions[Person](options.WithIgnoreInterface(true)))
 		assert.Equal(t, 0, factory.GetCounter())
 		factory.SetCounter(100)
 		assert.Equal(t, 100, factory.GetCounter())
 	})
 }
 
-func TestFactoryFunction(t *testing.T) {
-	factory := fabricator.New(Person{}, fabricator.Options[Person]{
-		Defaults: map[string]any{
-			"Id": func(iteration int, fieldName string) interface{} {
-				assert.Equal(t, "Id", fieldName)
-				return iteration + 1
-			},
-		},
-	})
+func TestFieldProviderContext(t *testing.T) {
+	factory := fabricator.New(
+		Person{},
+		fabricator.WithFakerOptions[Person](options.WithIgnoreInterface(true)),
+		fabricator.Field[Person]("ID", func(ctx fabricator.BuildContext) int {
+			assert.Equal(t, "ID", ctx.FieldName)
+			return ctx.Iteration + 1
+		}),
+	)
+
 	batch := factory.Batch(5)
 
 	for i, person := range batch {
-		assert.Equal(t, i+1, person.Id)
+		assert.Equal(t, i+1, person.ID)
 	}
+}
+
+func TestSubfactories(t *testing.T) {
+	petFactory := fabricator.New(
+		Pet{},
+		fabricator.Value[Pet]("Name", "Flippy"),
+		fabricator.Value[Pet]("Species", "Dolphin"),
+	)
+	profileFactory := fabricator.New(Profile{}, fabricator.Value[Profile]("Reason", "friendly"))
+	personFactory := fabricator.New(
+		Person{},
+		fabricator.WithFakerOptions[Person](options.WithIgnoreInterface(true)),
+		fabricator.Field[Person]("FavoritePet", fabricator.Subfactory(petFactory)),
+		fabricator.Field[Person]("FavoriteProfile", fabricator.PtrSubfactory(profileFactory)),
+		fabricator.Field[Person]("Pets", fabricator.SliceSubfactory(petFactory, 2)),
+	)
+
+	person := personFactory.Build()
+
+	assert.Equal(t, "Flippy", person.FavoritePet.Name)
+	assert.Equal(t, "Dolphin", person.FavoritePet.Species)
+	require.NotNil(t, person.FavoriteProfile)
+	assert.Equal(t, "friendly", person.FavoriteProfile.Reason)
+	require.Len(t, person.Pets, 2)
+	assert.Equal(t, "Flippy", person.Pets[0].Name)
+}
+
+func TestFakerOptions(t *testing.T) {
+	factory := fabricator.New(
+		Person{},
+		fabricator.WithFakerOptions[Person](options.WithIgnoreInterface(true)),
+		fabricator.Value[Person]("Metadata", "configured"),
+	)
+
+	person := factory.Build()
+
+	assert.Equal(t, "configured", person.Metadata)
+}
+
+func TestInvalidFieldPanics(t *testing.T) {
+	t.Run("unknown field", func(t *testing.T) {
+		factory := fabricator.New(
+			Person{},
+			fabricator.WithFakerOptions[Person](options.WithIgnoreInterface(true)),
+			fabricator.Value[Person]("Missing", "value"),
+		)
+
+		assert.PanicsWithValue(t, `unknown field "Missing"`, func() {
+			_ = factory.Build()
+		})
+	})
+
+	t.Run("wrong type", func(t *testing.T) {
+		factory := fabricator.New(
+			Person{},
+			fabricator.WithFakerOptions[Person](options.WithIgnoreInterface(true)),
+			fabricator.Value[Person]("ID", "not an int"),
+		)
+
+		assert.PanicsWithValue(t, `field "ID" expects int, got string`, func() {
+			_ = factory.Build()
+		})
+	})
 }
