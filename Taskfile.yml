@@ -6,10 +6,7 @@ tasks:
     cmds:
       - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
       - go install golang.org/x/vuln/cmd/govulncheck@latest
-      - brew list prek >/dev/null 2>&1 || brew install prek
-      - prek --version | grep -q '0.4.3' || { echo 'prek 0.4.3 is required; run brew upgrade prek'; exit 1; }
-      - prek install
-      - prek install --hook-type commit-msg
+      - poly hooks install
       - go mod download
 
   default:
