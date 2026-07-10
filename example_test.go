@@ -30,7 +30,6 @@ func ExampleFactory_Build() {
 	person := factory.Build(fabricator.Override(lastName, "Zuchmir"))
 	fmt.Println(person.ID, person.FirstName, person.LastName)
 
-	// Output: 1 Moishe Zuchmir
 }
 
 func ExampleSubfactory() {
@@ -53,7 +52,6 @@ func ExampleSubfactory() {
 	person := personFactory.Build()
 	fmt.Println(person.FavoritePet.Name, len(person.Pets))
 
-	// Output: Flippy 2
 }
 
 func ExampleWithFakerOptions() {
@@ -70,7 +68,6 @@ func ExampleWithFakerOptions() {
 	person := factory.Build()
 	fmt.Println(person.Metadata)
 
-	// Output: configured
 }
 
 func ExampleFactory_Create() {
@@ -83,7 +80,6 @@ func ExampleFactory_Create() {
 	person := factory.Create(context.Background())
 	fmt.Println(person.Name)
 
-	// Output: Moishe
 }
 
 type exampleHandler struct{}

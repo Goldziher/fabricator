@@ -3,20 +3,7 @@ name = "Fabricator"
 description = "Generics-first Go test data factory library."
 gitignore = true
 
-presets = [
-    "claude",
-    "cursor",
-    "gemini",
-    "windsurf",
-    "copilot",
-    "continue-dev",
-    "amp",
-    "cline",
-    "codex",
-    "opencode",
-    "junie",
-    "antigravity",
-]
+presets = ["claude", "codex"]
 
 builtins = ["go", "security", "git-workflow", "code-quality", "testing", "default-commands"]
 
