@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   validate:
-    uses: xberg-io/actions/.github/workflows/reusable-validate.yml@v1.8.104
+    uses: xberg-io/actions/.github/workflows/reusable-validate.yml@v1.8.108
 
   test:
     runs-on: ubuntu-latest
