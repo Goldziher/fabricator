@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   validate:
-    uses: xberg-io/actions/.github/workflows/reusable-validate.yml@v1.8.145
+    uses: xberg-io/actions/.github/workflows/reusable-validate.yml@v1.11.4
 
   test:
     runs-on: ubuntu-latest
@@ -44,7 +44,7 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.12.2
+          version: v2.13.2
 
   maintenance:
     runs-on: ubuntu-latest
@@ -57,18 +57,14 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "24"
-      - name: Install maintenance tools
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          cargo install prek --version 0.4.3
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: Run go vet
         run: go vet ./...
       - name: Run govulncheck
         run: govulncheck ./...
       - name: Validate ai-rulez
         run: npx -y ai-rulez@latest validate
-      - name: Run prek hooks
-        run: prek run --all-files
 
   analyze:
     runs-on: ubuntu-latest
@@ -83,8 +79,8 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4.37.8
+        uses: github/codeql-action/init@v4.37.9
         with:
           languages: go
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4.37.8
+        uses: github/codeql-action/analyze@v4.37.9

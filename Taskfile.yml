@@ -4,7 +4,7 @@ tasks:
   setup:
     desc: Set up the development environment
     cmds:
-      - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+      - go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
       - go install golang.org/x/vuln/cmd/govulncheck@latest
       - poly hooks install
       - go mod download
@@ -15,9 +15,10 @@ tasks:
       - task --list
 
   update:
-    desc: Update dependencies and pre-commit hooks
+    desc: Update dependencies, git hooks, and GitHub Actions
     cmds:
-      - prek autoupdate
+      - poly hooks update
+      - gau --recursive --update .
       - go get -u ./...
       - go mod tidy
 
@@ -32,9 +33,10 @@ tasks:
       - go test -race ./...
 
   lint:
-    desc: Run all pre-commit hooks
+    desc: Lint and format-check every file with poly
     cmds:
-      - prek run --all-files
+      - poly lint .
+      - poly fmt --check .
 
   check:
     desc: Run Go checks
