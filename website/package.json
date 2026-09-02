@@ -3,6 +3,14 @@
   "type": "module",
   "version": "0.0.1",
   "private": true,
+  "description": "Documentation site for Fabricator, typed test data factories for Go.",
+  "license": "MIT",
+  "homepage": "https://goldziher.github.io/fabricator/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Goldziher/fabricator.git",
+    "directory": "website"
+  },
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
