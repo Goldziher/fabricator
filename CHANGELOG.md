@@ -2,6 +2,33 @@
 
 All notable changes to Fabricator are documented in this file.
 
+## Unreleased
+
+### Added
+
+- `Seed` for reproducible generation. It seeds both of faker's sources, including the separate one behind `faker:"uuid_*"` fields, and documents that it is process-wide, that it must not race a build, and that reproducibility depends on run scope.
+- `Extend` for deriving a variant factory without restating a base's configuration.
+- `Sequence` for cycling values by build iteration.
+- `WithoutFaker` for starting builds from the zero value, and `WithFaker` to undo it on a derived factory.
+- Benchmarks for `Build`, `Batch`, `Extend`, and the `WithoutFaker` path.
+- A documentation site at <https://goldziher.github.io/fabricator/>, generated pixel-art brand assets, and a rewritten README.
+
+### Changed
+
+- Configuring the same field twice now keeps only the last configuration and does not run the superseded provider. Previously both ran and the second value won, so a superseded subfactory built a child and discarded it, and a superseded failing provider aborted a build whose value was never used.
+- `Sequence` copies the values it is given rather than aliasing the caller's slice.
+- The examples in `example_test.go` now assert their output, so they are executed rather than only compiled.
+
+### Fixed
+
+- CI failed on every pull request: `poly fmt --check` rejected `poly.toml`, golangci-lint flagged trailing newlines in `example_test.go`, and `cargo install prek` no longer compiled. `prek` is removed, since the project uses poly and has no pre-commit configuration for it to run.
+
+### Dependencies And Tooling
+
+- Updated `github.com/go-faker/faker/v4` to v4.11.0, `github.com/stretchr/testify` to v1.12.1, and `golang.org/x/text` to v0.41.0.
+- Updated golangci-lint to v2.13.2, the xberg-io reusable validate workflow to v1.11.4, and `github/codeql-action` to v4.37.9.
+- Test coverage raised from 92.1% to 97.2%, with the new APIs verified by mutation testing.
+
 ## v2.0.0 - 2026-05-28
 
 Fabricator v2 is a breaking generics-first redesign and uses the Go module path `github.com/Goldziher/fabricator/v2`.

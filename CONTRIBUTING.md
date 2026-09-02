@@ -3,7 +3,7 @@
 To contribute code or documentation changes:
 
 1. Fork the upstream repository and clone your fork locally.
-2. Install Go 1.26, Task, and Homebrew `prek`.
+2. Install Go 1.26, [Task](https://taskfile.dev), and [poly](https://github.com/Goldziher/poly).
 3. Run `task setup` to install Go tooling and Git hooks.
 4. Make focused changes with tests.
 5. Run `task check`, `task test:race`, and `task lint`.
