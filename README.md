@@ -8,11 +8,11 @@
 Say what matters to the test; let the rest be generated.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/Goldziher/fabricator/ci.yaml?style=flat-square&label=ci)](https://github.com/Goldziher/fabricator/actions/workflows/ci.yaml)
-[![Go Reference](https://img.shields.io/badge/pkg.go.dev-reference-00ADD8?style=flat-square)](https://pkg.go.dev/github.com/Goldziher/fabricator/v2)
-[![Go Report Card](https://goreportcard.com/badge/github.com/Goldziher/fabricator?style=flat-square)](https://goreportcard.com/report/github.com/Goldziher/fabricator)
-[![Latest Release](https://img.shields.io/github/v/release/Goldziher/fabricator?sort=semver&style=flat-square)](https://github.com/Goldziher/fabricator/releases)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/Goldziher/fabricator?style=flat-square)](https://github.com/Goldziher/fabricator/blob/main/go.mod)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
+[![Go Reference](https://img.shields.io/badge/pkg.go.dev-reference-00add8?style=flat-square)](https://pkg.go.dev/github.com/Goldziher/fabricator/v2)
+[![Docs](https://img.shields.io/badge/docs-goldziher.github.io%2Ffabricator-00add8?style=flat-square)](https://goldziher.github.io/fabricator/)
+[![Latest Release](https://img.shields.io/github/v/release/Goldziher/fabricator?sort=semver&style=flat-square&color=00add8)](https://github.com/Goldziher/fabricator/releases)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/Goldziher/fabricator?style=flat-square&color=00add8)](https://github.com/Goldziher/fabricator/blob/main/go.mod)
+[![License: MIT](https://img.shields.io/badge/license-MIT-00add8?style=flat-square)](LICENSE)
 
 [Docs](https://goldziher.github.io/fabricator/) · [Quickstart](#quickstart) · [Guides](#guides) · [API](https://pkg.go.dev/github.com/Goldziher/fabricator/v2)
 
@@ -208,6 +208,7 @@ task test       # go test ./...
 task test:race  # go test -race ./...
 task check      # vet, golangci-lint, govulncheck, ai-rulez
 task lint       # poly lint and format check
+task update     # dependencies, git hooks, and GitHub Actions
 ```
 
 Brand assets are generated, not hand-committed:

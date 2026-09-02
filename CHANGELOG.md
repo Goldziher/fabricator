@@ -2,7 +2,9 @@
 
 All notable changes to Fabricator are documented in this file.
 
-## Unreleased
+## v2.1.0 - 2026-09-02
+
+Four additions aimed at the parts of a factory that were previously awkward: pinning generation so a failure reproduces, deriving a variant without restating a base, cycling values across a batch, and opting out of generation entirely.
 
 ### Added
 
@@ -20,6 +22,8 @@ All notable changes to Fabricator are documented in this file.
 - Configuring the same field twice now keeps only the last configuration and does not run the superseded provider. Previously both ran and the second value won, so a superseded subfactory built a child and discarded it, and a superseded failing provider aborted a build whose value was never used.
 - `Sequence` copies the values it is given rather than aliasing the caller's slice.
 - The examples in `example_test.go` now assert their output, so they are executed rather than only compiled.
+- Dropped the Go Report Card badge: the service is sunset and the badge now renders "go report: retired". A documentation badge takes its place, and the remaining badges use the project's cyan accent, matching the sibling projects.
+- The website package now declares a description, license, and repository, and its lockfile no longer carries ten entries npm had marked extraneous.
 
 ### Fixed
 
