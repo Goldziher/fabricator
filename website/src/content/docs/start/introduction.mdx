@@ -48,17 +48,28 @@ reflectively and generates a value for every field.
 
 When a test wants exact fixtures rather than plausible ones,
 [`WithoutFaker`](/fabricator/guides/fields/#skipping-generation) starts from the
-zero value instead. It is both clearer and around three orders of magnitude
-cheaper:
+zero value instead. It is both clearer and dramatically cheaper. On a struct of
+four scalar fields:
 
-| | ns/op | B/op | allocs/op |
-| --- | --- | --- | --- |
-| `Build` | 186,106 | 81,153 | 1,807 |
-| `Build` with `WithoutFaker` | 124 | 184 | 4 |
+| | B/op | allocs/op |
+| --- | ---: | ---: |
+| `Build` | 2,128 | 45 |
+| `Build` with `WithoutFaker` | 64 | 1 |
 
-<small>`go test -bench .` on an Apple M4 Pro, Go 1.27, against the `Person`
-fixture in the test suite. Your numbers depend entirely on how large and how
-nested your struct is.</small>
+<small>`go test -bench .` on an Apple M4 Pro, Go 1.27. Allocation counts are
+quoted rather than ns/op because they are deterministic and the wall-clock
+figures are machine-dependent; on this shape the time difference is roughly
+50x.</small>
+
+The gap widens sharply with collections. Faker's default maximum slice and map
+size is 100, so a struct carrying one `[]Pet` and one `map[string]string` spends
+around 1,800 allocations per build generating roughly fifty pets and fifty map
+entries — almost all of which a given test never reads. Either skip generation,
+or cap the sizes:
+
+```go
+fabricator.WithFakerOptions[Person](options.WithRandomMapAndSliceMaxSize(3))
+```
 
 ## When not to use it
 

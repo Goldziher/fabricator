@@ -68,6 +68,11 @@ fabricator.Value(firstName, "Moishe")
 
 Applies to every build from the factory.
 
+`Value` is also the cheaper form. Because the value is fixed when you configure
+it, Fabricator prepares it once at that point; a `Field` provider has to be
+called and its result boxed on every build, which costs an allocation per field
+per build. Prefer `Value` whenever the value does not depend on the build.
+
 ## Providers
 
 `Field` takes a function called once per build, which receives the build's

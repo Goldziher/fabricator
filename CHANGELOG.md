@@ -15,6 +15,8 @@ All notable changes to Fabricator are documented in this file.
 
 ### Changed
 
+- Static `Value` and `Override` configuration is prepared once when the factory is configured rather than boxed on every build, and `Batch`/`CreateBatch` resolve their build options once per call rather than once per item. Together with skipping the per-build override config when a call has no overrides, this cuts allocations by 53% (geometric mean) across the build benchmarks: a `WithoutFaker` build goes from 4 allocations to 1, `Batch(10)` from 31 to 11, and `Batch(10, override)` from 41 to 13. `Extend` pays 232 to 304 bytes more per call in exchange, since preparation now happens at configuration time.
+- Benchmarks were rewritten. The previous `BenchmarkBuild` was 99.6% `faker.FakeData` on a fixture carrying a slice and a map, where faker's default maximum collection size of 100 dominated everything; it read as a Fabricator cost and was not one. Benchmarks now separate the faker path from the `WithoutFaker` path, cover `Create`/`CreateBatch` and parallel builds, and hoist option construction out of `BenchmarkExtend`.
 - Configuring the same field twice now keeps only the last configuration and does not run the superseded provider. Previously both ran and the second value won, so a superseded subfactory built a child and discarded it, and a superseded failing provider aborted a build whose value was never used.
 - `Sequence` copies the values it is given rather than aliasing the caller's slice.
 - The examples in `example_test.go` now assert their output, so they are executed rather than only compiled.

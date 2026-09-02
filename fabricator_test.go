@@ -1121,6 +1121,22 @@ func TestExtend(t *testing.T) {
 		assert.Equal(t, 0, child.GetCounter(), "the superseded subfactory must not have been built")
 	})
 
+	t.Run("New also drops a superseded provider", func(t *testing.T) {
+		// The same rule as Extend's, applied to a single New call.
+		child := fabricator.New(Pet{}, fabricator.WithoutFaker[Pet]())
+		favorite := fabricator.FieldOf[Person, Pet]("FavoritePet")
+
+		factory := fabricator.New(
+			Person{},
+			fabricator.WithoutFaker[Person](),
+			fabricator.Field(favorite, fabricator.Subfactory(child)),
+			fabricator.Value(favorite, Pet{Name: "Flippy"}),
+		)
+
+		assert.Equal(t, "Flippy", factory.Build().FavoritePet.Name)
+		assert.Equal(t, 0, child.GetCounter(), "the superseded subfactory must not have been built")
+	})
+
 	t.Run("can turn faker back on and off again", func(t *testing.T) {
 		withoutFaker := fabricator.New(Person{}, fabricator.WithoutFaker[Person]())
 
@@ -1206,6 +1222,28 @@ func TestSeed(t *testing.T) {
 		assert.NotEmpty(t, person.FirstName, "seeding must not stop faker from generating")
 	})
 
+	t.Run("the seeded uuid source is safe for concurrent builds", func(t *testing.T) {
+		// The uuid source is a plain math/rand generator underneath, which is not
+		// safe for concurrent use unless Fabricator guards it.
+		type tagged struct {
+			ID string `faker:"uuid_hyphenated"`
+		}
+		fabricator.Seed(11)
+		factory := fabricator.New(tagged{})
+
+		var group sync.WaitGroup
+		for range 16 {
+			group.Go(func() {
+				for range 25 {
+					_ = factory.Build()
+				}
+			})
+		}
+		group.Wait()
+
+		assert.Equal(t, 400, factory.GetCounter())
+	})
+
 	t.Run("reproduces uuid tagged fields", func(t *testing.T) {
 		// faker draws UUIDs from a source separate from its main one, so this
 		// fails unless Seed seeds both.
@@ -1244,8 +1282,48 @@ func TestSeed(t *testing.T) {
 	})
 }
 
-func BenchmarkBuild(b *testing.B) {
+// benchSmall is the shape most factories actually build: a handful of scalar
+// fields. Person is deliberately not that — it carries a slice and a map, and
+// faker's default collection size is 100, so a Person build spends nearly all
+// of its time generating ~50 pets and ~50 labels.
+type benchSmall struct {
+	ID        int
+	FirstName string
+	LastName  string
+	Email     string
+}
+
+// BenchmarkFakerPerson is dominated by faker, not by Fabricator: the factory
+// configures nothing, so it measures generating a struct with two 100-element
+// collections. It is here as the ceiling, not as a Fabricator cost.
+func BenchmarkFakerPerson(b *testing.B) {
 	factory := personFactory()
+
+	b.ReportAllocs()
+
+	for b.Loop() {
+		_ = factory.Build()
+	}
+}
+
+func BenchmarkFakerSmall(b *testing.B) {
+	factory := fabricator.New(benchSmall{})
+
+	b.ReportAllocs()
+
+	for b.Loop() {
+		_ = factory.Build()
+	}
+}
+
+// BenchmarkFakerSmallWithFields is the realistic faker-path shape: generation
+// plus field configuration.
+func BenchmarkFakerSmallWithFields(b *testing.B) {
+	factory := fabricator.New(
+		benchSmall{},
+		fabricator.Value(fabricator.FieldOf[benchSmall, string]("FirstName"), "Moishe"),
+		fabricator.Value(fabricator.FieldOf[benchSmall, string]("LastName"), "Zuchmir"),
+	)
 
 	b.ReportAllocs()
 
@@ -1256,10 +1334,10 @@ func BenchmarkBuild(b *testing.B) {
 
 func BenchmarkBuildWithoutFaker(b *testing.B) {
 	factory := fabricator.New(
-		Person{},
-		fabricator.WithoutFaker[Person](),
-		fabricator.Value(fabricator.FieldOf[Person, string]("FirstName"), "Moishe"),
-		fabricator.Value(fabricator.FieldOf[Person, string]("LastName"), "Zuchmir"),
+		benchSmall{},
+		fabricator.WithoutFaker[benchSmall](),
+		fabricator.Value(fabricator.FieldOf[benchSmall, string]("FirstName"), "Moishe"),
+		fabricator.Value(fabricator.FieldOf[benchSmall, string]("LastName"), "Zuchmir"),
 	)
 
 	b.ReportAllocs()
@@ -1269,8 +1347,31 @@ func BenchmarkBuildWithoutFaker(b *testing.B) {
 	}
 }
 
-func BenchmarkBatch(b *testing.B) {
-	factory := personFactory()
+// BenchmarkBuildWithoutFakerProvider is the same build through providers rather
+// than static values, which cannot be pre-boxed and so allocates per field.
+func BenchmarkBuildWithoutFakerProvider(b *testing.B) {
+	factory := fabricator.New(
+		benchSmall{},
+		fabricator.WithoutFaker[benchSmall](),
+		fabricator.Field(fabricator.FieldOf[benchSmall, string]("FirstName"),
+			func(fabricator.BuildContext) string { return "Moishe" }),
+		fabricator.Field(fabricator.FieldOf[benchSmall, string]("LastName"),
+			func(fabricator.BuildContext) string { return "Zuchmir" }),
+	)
+
+	b.ReportAllocs()
+
+	for b.Loop() {
+		_ = factory.Build()
+	}
+}
+
+func BenchmarkBatchWithoutFaker(b *testing.B) {
+	factory := fabricator.New(
+		benchSmall{},
+		fabricator.WithoutFaker[benchSmall](),
+		fabricator.Value(fabricator.FieldOf[benchSmall, string]("FirstName"), "Moishe"),
+	)
 
 	b.ReportAllocs()
 
@@ -1279,17 +1380,73 @@ func BenchmarkBatch(b *testing.B) {
 	}
 }
 
-func BenchmarkExtend(b *testing.B) {
-	base := personFactory(
-		fabricator.Value(fabricator.FieldOf[Person, string]("FirstName"), "Moishe"),
-	)
-	lastName := fabricator.FieldOf[Person, string]("LastName")
+func BenchmarkBatchWithOverride(b *testing.B) {
+	factory := fabricator.New(benchSmall{}, fabricator.WithoutFaker[benchSmall]())
+	override := fabricator.Override(fabricator.FieldOf[benchSmall, string]("LastName"), "Zuchmir")
 
 	b.ReportAllocs()
 
 	for b.Loop() {
-		_ = fabricator.Extend(base, fabricator.Value(lastName, "Zuchmir"))
+		_ = factory.Batch(10, override)
 	}
+}
+
+func BenchmarkCreateBatch(b *testing.B) {
+	factory := fabricator.New(
+		benchSmall{},
+		fabricator.WithoutFaker[benchSmall](),
+		fabricator.WithPersistenceHandler[benchSmall](passthroughHandler{}),
+	)
+	ctx := b.Context()
+
+	b.ReportAllocs()
+
+	for b.Loop() {
+		_ = factory.CreateBatch(ctx, 10)
+	}
+}
+
+// BenchmarkExtend hoists the option out of the loop so it measures Extend
+// rather than option construction.
+func BenchmarkExtend(b *testing.B) {
+	base := fabricator.New(
+		benchSmall{},
+		fabricator.WithoutFaker[benchSmall](),
+		fabricator.Value(fabricator.FieldOf[benchSmall, string]("FirstName"), "Moishe"),
+	)
+	option := fabricator.Value(fabricator.FieldOf[benchSmall, string]("LastName"), "Zuchmir")
+
+	b.ReportAllocs()
+
+	for b.Loop() {
+		_ = fabricator.Extend(base, option)
+	}
+}
+
+func BenchmarkBuildParallel(b *testing.B) {
+	factory := fabricator.New(
+		benchSmall{},
+		fabricator.WithoutFaker[benchSmall](),
+		fabricator.Value(fabricator.FieldOf[benchSmall, string]("FirstName"), "Moishe"),
+	)
+
+	b.ReportAllocs()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_ = factory.Build()
+		}
+	})
+}
+
+type passthroughHandler struct{}
+
+func (passthroughHandler) Save(_ context.Context, model benchSmall) (benchSmall, error) {
+	return model, nil
+}
+
+func (passthroughHandler) SaveMany(_ context.Context, models []benchSmall) ([]benchSmall, error) {
+	return models, nil
 }
 
 func TestPtrSubfactoryWith(t *testing.T) {

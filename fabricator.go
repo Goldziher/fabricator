@@ -98,6 +98,10 @@ type FieldRef[T any, V any] struct {
 type fieldSetter[T any] struct {
 	name    string
 	provide func(BuildContext) any
+	// constant holds the value for a static Value or Override, boxed and
+	// reflected once at configuration time. A build then skips both the
+	// closure call and the per-build box. Invalid means "use provide".
+	constant reflect.Value
 }
 
 // BuildConfig contains field overrides for a single build call.
@@ -359,16 +363,20 @@ func Field[T any, V any](field FieldRef[T, V], provider FieldProvider[V]) Option
 
 // Value configures a static typed value for a struct field.
 func Value[T any, V any](field FieldRef[T, V], value V) Option[T] {
-	return Field(field, func(BuildContext) V {
-		return value
-	})
+	setter := newConstantFieldSetter(field, value)
+
+	return func(factory *Factory[T]) {
+		factory.defaults = append(factory.defaults, setter)
+	}
 }
 
 // Override configures a typed field value for a single build call.
 func Override[T any, V any](field FieldRef[T, V], value V) BuildOption[T] {
-	return OverrideField(field, func(BuildContext) V {
-		return value
-	})
+	setter := newConstantFieldSetter(field, value)
+
+	return func(config *BuildConfig[T]) {
+		config.fields = append(config.fields, setter)
+	}
 }
 
 // OverrideField configures a typed field provider for a single build call.
@@ -455,6 +463,16 @@ func newFieldSetter[T any, V any](field FieldRef[T, V], provider FieldProvider[V
 	}
 }
 
+// newConstantFieldSetter boxes a static value once, at configuration time,
+// instead of once per build. A provider closure is kept as a fallback for an
+// untyped nil, which has no reflect.Value and still needs the SetZero path.
+func newConstantFieldSetter[T any, V any](field FieldRef[T, V], value V) fieldSetter[T] {
+	setter := newFieldSetter(field, func(BuildContext) V { return value })
+	setter.constant = reflect.ValueOf(any(value))
+
+	return setter
+}
+
 func lookupField[T any](name string) (reflect.StructField, error) {
 	if strings.Contains(name, ".") {
 		return reflect.StructField{}, fmt.Errorf("nested field paths are not supported: %q", name)
@@ -486,6 +504,10 @@ func applyFieldSetter[T any](model *T, iteration int, setter fieldSetter[T]) err
 		return fmt.Errorf("field %q cannot be set", setter.name)
 	}
 
+	if setter.constant.IsValid() {
+		return assignField(field, setter.constant, setter.name)
+	}
+
 	rawValue := setter.provide(BuildContext{
 		Iteration: iteration,
 		FieldName: setter.name,
@@ -498,17 +520,21 @@ func applyFieldSetter[T any](model *T, iteration int, setter fieldSetter[T]) err
 		return nil
 	}
 
-	value := reflect.ValueOf(rawValue)
+	return assignField(field, reflect.ValueOf(rawValue), setter.name)
+}
+
+func assignField(field, value reflect.Value, name string) error {
 	if !value.Type().AssignableTo(field.Type()) {
 		return fmt.Errorf(
 			"field %q expects %s, got %s",
-			setter.name,
+			name,
 			field.Type(),
 			value.Type(),
 		)
 	}
 
 	field.Set(value)
+
 	return nil
 }
 
@@ -574,6 +600,30 @@ func (factory *Factory[T]) BuildE(overrides ...BuildOption[T]) (T, error) {
 }
 
 func (factory *Factory[T]) buildE(overrides ...BuildOption[T]) (model T, iteration int, err error) {
+	return factory.build(resolveOverrides(overrides))
+}
+
+// resolveOverrides runs the BuildOptions once and returns the setters they
+// produced. Batch calls resolve once and reuse the result for every item
+// rather than re-running the same closures per item; the setters' providers
+// are still called per build, so per-iteration values are unaffected.
+//
+// This is safe because BuildConfig has only unexported fields, so a
+// BuildOption cannot do anything but append setters.
+func resolveOverrides[T any](overrides []BuildOption[T]) []fieldSetter[T] {
+	if len(overrides) == 0 {
+		return nil
+	}
+
+	config := BuildConfig[T]{}
+	for _, override := range overrides {
+		override(&config)
+	}
+
+	return config.fields
+}
+
+func (factory *Factory[T]) build(overrides []fieldSetter[T]) (model T, iteration int, err error) {
 	if !factory.skipFaker {
 		if fakerErr := faker.FakeData(&model, factory.fakerOptions...); fakerErr != nil {
 			return model, 0, fmt.Errorf("error generating fake data: %w", fakerErr)
@@ -594,11 +644,7 @@ func (factory *Factory[T]) buildE(overrides ...BuildOption[T]) (model T, iterati
 		}
 	}
 
-	config := BuildConfig[T]{}
-	for _, override := range overrides {
-		override(&config)
-	}
-	for _, setter := range config.fields {
+	for _, setter := range overrides {
 		if err := applyFieldSetter(&model, iteration, setter); err != nil {
 			return model, iteration, err
 		}
@@ -624,9 +670,10 @@ func (factory *Factory[T]) BatchE(size int, overrides ...BuildOption[T]) ([]T, e
 		return nil, fmt.Errorf("batch size must be non-negative, got %d", size)
 	}
 
+	resolved := resolveOverrides(overrides)
 	batch := make([]T, 0, size)
 	for range size {
-		instance, _, err := factory.buildE(overrides...)
+		instance, _, err := factory.build(resolved)
 		if err != nil {
 			return nil, err
 		}
@@ -683,15 +730,25 @@ func (factory *Factory[T]) CreateBatchE(ctx context.Context, size int, overrides
 		return nil, fmt.Errorf("batch size must be non-negative, got %d", size)
 	}
 
+	resolved := resolveOverrides(overrides)
 	batch := make([]T, 0, size)
-	iterations := make([]int, 0, size)
+
+	// Iterations are only read back by afterCreate hooks; without any, tracking
+	// them is a wasted allocation on every batch.
+	var iterations []int
+	if len(factory.afterCreate) > 0 {
+		iterations = make([]int, 0, size)
+	}
+
 	for range size {
-		instance, iteration, err := factory.buildE(overrides...)
+		instance, iteration, err := factory.build(resolved)
 		if err != nil {
 			return nil, err
 		}
 		batch = append(batch, instance)
-		iterations = append(iterations, iteration)
+		if iterations != nil {
+			iterations = append(iterations, iteration)
+		}
 	}
 
 	created, err := factory.persistenceHandler.SaveMany(ctx, batch)

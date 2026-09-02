@@ -166,15 +166,20 @@ factory.Build() // User{Name: "Moishe"} — everything else zero
 ```
 
 It is deterministic regardless of seed or ordering, and faker's reflective walk
-over `T` is what a build actually costs:
+over `T` is what a build actually costs. On a struct of four scalar fields:
 
-| | ns/op | B/op | allocs/op |
-| --- | ---: | ---: | ---: |
-| `Build` | 186,106 | 81,153 | 1,807 |
-| `Build` with `WithoutFaker` | 124 | 184 | 4 |
+| | B/op | allocs/op |
+| --- | ---: | ---: |
+| `Build` | 2,128 | 45 |
+| `Build` with `WithoutFaker` | 64 | 1 |
 
-<sub>`go test -bench .`, Apple M4 Pro, Go 1.27, against the `Person` fixture in
-the suite. Your numbers depend on how large and how nested your struct is.</sub>
+<sub>`go test -bench .`, Apple M4 Pro, Go 1.27. Allocation counts are quoted
+rather than ns/op because they are deterministic; the wall-clock gap on this
+shape is roughly 50x, but the exact figure depends on the machine. It gets far
+more extreme with collections: faker's default maximum slice and map size is
+100, so a struct with one `[]Pet` and one `map[string]string` costs about 1,800
+allocations per build, essentially all of it generating elements a test will
+never look at.</sub>
 
 ## Guides
 
