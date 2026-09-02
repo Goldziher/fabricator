@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"testing"
 
@@ -56,9 +57,24 @@ type WithAmbiguousEmbedded struct {
 	EmbeddedTwo
 }
 
+// suiteSeed keeps the whole suite reproducible. TestSeed reseeds on purpose and
+// restores this afterwards, so no test depends on the order it ran in.
+const suiteSeed int64 = 1337
+
+func TestMain(m *testing.M) {
+	fabricator.Seed(suiteSeed)
+	os.Exit(m.Run())
+}
+
 func personFactory(opts ...fabricator.Option[Person]) *fabricator.Factory[Person] {
 	base := []fabricator.Option[Person]{
-		fabricator.WithFakerOptions[Person](options.WithIgnoreInterface(true)),
+		fabricator.WithFakerOptions[Person](
+			options.WithIgnoreInterface(true),
+			// Without a floor, faker produces a zero-length Pets slice for
+			// roughly 1% of random sources, which would make every "faker
+			// populated this" assertion an occasional flake.
+			options.WithRandomMapAndSliceMinSize(1),
+		),
 	}
 
 	return fabricator.New(Person{}, append(base, opts...)...)
@@ -153,7 +169,7 @@ func TestFactoryBuild(t *testing.T) {
 		assert.NotZero(t, person.ID)
 		assert.NotEmpty(t, person.FirstName)
 		assert.NotEmpty(t, person.LastName)
-		assert.NotZero(t, person.Pets)
+		assert.NotEmpty(t, person.Pets)
 		assert.NotZero(t, person.FavoritePet)
 	})
 
@@ -741,6 +757,19 @@ func TestSequence(t *testing.T) {
 		assert.Equal(t, "a", people[2].FirstName)
 	})
 
+	t.Run("does not alias the caller's slice", func(t *testing.T) {
+		values := []string{"a", "b"}
+		factory := fabricator.New(
+			Person{},
+			fabricator.WithoutFaker[Person](),
+			fabricator.Field(fabricator.FieldOf[Person, string]("FirstName"), fabricator.Sequence(values...)),
+		)
+
+		values[0] = "mutated"
+
+		assert.Equal(t, "a", factory.Build().FirstName)
+	})
+
 	t.Run("panics without values", func(t *testing.T) {
 		assert.PanicsWithValue(t, "sequence requires at least one value", func() {
 			fabricator.Sequence[string]()
@@ -939,6 +968,173 @@ func TestExtend(t *testing.T) {
 		assert.Empty(t, person.LastName)
 	})
 
+	t.Run("inherits after faker hooks", func(t *testing.T) {
+		var order []string
+		base := fabricator.New(
+			Person{},
+			fabricator.WithoutFaker[Person](),
+			fabricator.AfterFaker(func(*Person, fabricator.BuildContext) error {
+				order = append(order, "base")
+
+				return nil
+			}),
+		)
+
+		derived := fabricator.Extend(base, fabricator.AfterFaker(func(*Person, fabricator.BuildContext) error {
+			order = append(order, "derived")
+
+			return nil
+		}))
+
+		derived.Build()
+		assert.Equal(t, []string{"base", "derived"}, order)
+	})
+
+	t.Run("inherits after create hooks", func(t *testing.T) {
+		var order []string
+		base := fabricator.New(
+			Person{},
+			fabricator.WithoutFaker[Person](),
+			fabricator.WithPersistenceHandler[Person](&recordingHandler{}),
+			fabricator.AfterCreate(func(*Person, fabricator.BuildContext) error {
+				order = append(order, "base")
+
+				return nil
+			}),
+		)
+
+		derived := fabricator.Extend(base, fabricator.AfterCreate(func(*Person, fabricator.BuildContext) error {
+			order = append(order, "derived")
+
+			return nil
+		}))
+
+		_, err := derived.CreateE(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, []string{"base", "derived"}, order)
+
+		// CreateBatchE is the only other path an inherited AfterCreate takes.
+		order = nil
+		_, err = derived.CreateBatchE(t.Context(), 2)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"base", "derived", "base", "derived"}, order)
+	})
+
+	t.Run("sibling factories do not share an after faker backing array", func(t *testing.T) {
+		var order []string
+		record := func(label string) fabricator.Hook[Person] {
+			return func(*Person, fabricator.BuildContext) error {
+				order = append(order, label)
+
+				return nil
+			}
+		}
+		base := fabricator.New(
+			Person{},
+			fabricator.WithoutFaker[Person](),
+			fabricator.AfterFaker(record("base1")),
+			fabricator.AfterFaker(record("base2")),
+			fabricator.AfterFaker(record("base3")),
+		)
+
+		first := fabricator.Extend(base, fabricator.AfterFaker(record("first")))
+		second := fabricator.Extend(base, fabricator.AfterFaker(record("second")))
+
+		order = nil
+		first.Build()
+		assert.Equal(t, []string{"base1", "base2", "base3", "first"}, order)
+
+		order = nil
+		second.Build()
+		assert.Equal(t, []string{"base1", "base2", "base3", "second"}, order)
+	})
+
+	t.Run("sibling factories do not share an after create backing array", func(t *testing.T) {
+		var order []string
+		record := func(label string) fabricator.Hook[Person] {
+			return func(*Person, fabricator.BuildContext) error {
+				order = append(order, label)
+
+				return nil
+			}
+		}
+		base := fabricator.New(
+			Person{},
+			fabricator.WithoutFaker[Person](),
+			fabricator.WithPersistenceHandler[Person](&recordingHandler{}),
+			fabricator.AfterCreate(record("base1")),
+			fabricator.AfterCreate(record("base2")),
+			fabricator.AfterCreate(record("base3")),
+		)
+
+		first := fabricator.Extend(base, fabricator.AfterCreate(record("first")))
+		second := fabricator.Extend(base, fabricator.AfterCreate(record("second")))
+
+		order = nil
+		_, err := first.CreateE(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, []string{"base1", "base2", "base3", "first"}, order)
+
+		order = nil
+		_, err = second.CreateE(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, []string{"base1", "base2", "base3", "second"}, order)
+	})
+
+	t.Run("sibling factories do not share a faker option backing array", func(t *testing.T) {
+		// Exactly three separate WithFakerOptions calls. The count matters: a
+		// slice grown to three has spare capacity, which is the only state in
+		// which two siblings can append into the same slot. Passing three
+		// options to one call lands exactly on capacity and hides the bug.
+		base := fabricator.New(
+			Person{},
+			fabricator.WithFakerOptions[Person](options.WithIgnoreInterface(true)),
+			fabricator.WithFakerOptions[Person](options.WithRandomMapAndSliceMinSize(1)),
+			fabricator.WithFakerOptions[Person](options.WithRandomMapAndSliceMaxSize(2)),
+		)
+
+		first := fabricator.Extend(base, fabricator.WithFakerOptions[Person](options.WithRandomStringLength(4)))
+		second := fabricator.Extend(base, fabricator.WithFakerOptions[Person](options.WithRandomStringLength(40)))
+
+		assert.Len(t, first.Build().FirstName, 4, "the sibling's option must not clobber this one")
+		assert.Len(t, second.Build().FirstName, 40)
+	})
+
+	t.Run("a superseded base provider does not run", func(t *testing.T) {
+		// The base configures the field from a subfactory. Overriding that field
+		// must not still build (and discard) a child, which the child's counter
+		// would record.
+		child := fabricator.New(Pet{}, fabricator.WithoutFaker[Pet]())
+		base := fabricator.New(
+			Person{},
+			fabricator.WithoutFaker[Person](),
+			fabricator.Field(fabricator.FieldOf[Person, Pet]("FavoritePet"), fabricator.Subfactory(child)),
+		)
+
+		derived := fabricator.Extend(
+			base,
+			fabricator.Value(fabricator.FieldOf[Person, Pet]("FavoritePet"), Pet{Name: "Flippy"}),
+		)
+
+		person := derived.Build()
+		assert.Equal(t, "Flippy", person.FavoritePet.Name)
+		assert.Equal(t, 0, child.GetCounter(), "the superseded subfactory must not have been built")
+	})
+
+	t.Run("can turn faker back on and off again", func(t *testing.T) {
+		withoutFaker := fabricator.New(Person{}, fabricator.WithoutFaker[Person]())
+
+		restored := fabricator.Extend(
+			withoutFaker,
+			fabricator.WithFaker[Person](),
+			fabricator.WithFakerOptions[Person](options.WithIgnoreInterface(true)),
+		)
+		assert.NotEmpty(t, restored.Build().FirstName)
+
+		disabled := fabricator.Extend(personFactory(), fabricator.WithoutFaker[Person]())
+		assert.Empty(t, disabled.Build().FirstName)
+	})
+
 	t.Run("panics on a nil factory", func(t *testing.T) {
 		assert.PanicsWithValue(t, "cannot extend a nil factory", func() {
 			fabricator.Extend[Person](nil)
@@ -963,8 +1159,11 @@ func (handler *recordingHandler) SaveMany(_ context.Context, people []Person) ([
 }
 
 func TestSeed(t *testing.T) {
-	// Seed sets faker's process-wide source, so these subtests must not run in
-	// parallel with anything that builds from faker.
+	// Seed sets faker's process-wide sources, so these subtests must not run in
+	// parallel with anything that builds from faker, and the suite's own seed
+	// has to be put back afterwards or every later test depends on this one.
+	t.Cleanup(func() { fabricator.Seed(suiteSeed) })
+
 	build := func() Person {
 		return personFactory().Build()
 	}
@@ -1005,6 +1204,43 @@ func TestSeed(t *testing.T) {
 		person := build()
 
 		assert.NotEmpty(t, person.FirstName, "seeding must not stop faker from generating")
+	})
+
+	t.Run("reproduces uuid tagged fields", func(t *testing.T) {
+		// faker draws UUIDs from a source separate from its main one, so this
+		// fails unless Seed seeds both.
+		type tagged struct {
+			ID string `faker:"uuid_hyphenated"`
+		}
+		factory := fabricator.New(tagged{})
+
+		fabricator.Seed(9)
+		first := factory.Build()
+
+		fabricator.Seed(9)
+		second := factory.Build()
+
+		assert.NotEmpty(t, first.ID)
+		assert.Equal(t, first.ID, second.ID)
+	})
+
+	t.Run("the seeded sources are safe for concurrent builds", func(t *testing.T) {
+		// Guards the doc's claim that builds may run in parallel after seeding.
+		// Without the concurrency-safe wrappers this is a race under -race.
+		fabricator.Seed(99)
+		factory := personFactory()
+
+		var group sync.WaitGroup
+		for range 32 {
+			group.Go(func() {
+				for range 20 {
+					_ = factory.Build()
+				}
+			})
+		}
+		group.Wait()
+
+		assert.Equal(t, 640, factory.GetCounter())
 	})
 }
 
@@ -1054,4 +1290,88 @@ func BenchmarkExtend(b *testing.B) {
 	for b.Loop() {
 		_ = fabricator.Extend(base, fabricator.Value(lastName, "Zuchmir"))
 	}
+}
+
+func TestPtrSubfactoryWith(t *testing.T) {
+	reason := fabricator.FieldOf[Profile, string]("Reason")
+	profileFactory := fabricator.New(Profile{}, fabricator.WithoutFaker[Profile]())
+
+	factory := fabricator.New(
+		Person{},
+		fabricator.WithoutFaker[Person](),
+		fabricator.Field(
+			fabricator.FieldOf[Person, *Profile]("FavoriteProfile"),
+			fabricator.PtrSubfactoryWith(profileFactory, func(ctx fabricator.BuildContext) []fabricator.BuildOption[Profile] {
+				return []fabricator.BuildOption[Profile]{
+					fabricator.Override(reason, fmt.Sprintf("parent-%d", ctx.Iteration)),
+				}
+			}),
+		),
+	)
+
+	people := factory.Batch(2)
+
+	require.NotNil(t, people[0].FavoriteProfile)
+	require.NotNil(t, people[1].FavoriteProfile)
+	assert.Equal(t, "parent-0", people[0].FavoriteProfile.Reason)
+	assert.Equal(t, "parent-1", people[1].FavoriteProfile.Reason)
+	assert.NotSame(t, people[0].FavoriteProfile, people[1].FavoriteProfile)
+}
+
+func TestCreateBatchGuards(t *testing.T) {
+	// These mirror the guards already covered for CreateE and BatchE. Near
+	// identical code with asymmetric coverage is where copy-paste bugs survive.
+	t.Run("requires a persistence handler", func(t *testing.T) {
+		factory := fabricator.New(Person{}, fabricator.WithoutFaker[Person]())
+
+		_, err := factory.CreateBatchE(t.Context(), 2)
+
+		require.EqualError(t, err, "cannot call .CreateBatch on a factory without a persistence handler")
+		assert.PanicsWithValue(t, "cannot call .CreateBatch on a factory without a persistence handler", func() {
+			factory.CreateBatch(t.Context(), 2)
+		})
+	})
+
+	t.Run("rejects a negative size", func(t *testing.T) {
+		factory := fabricator.New(
+			Person{},
+			fabricator.WithoutFaker[Person](),
+			fabricator.WithPersistenceHandler[Person](&recordingHandler{}),
+		)
+
+		_, err := factory.CreateBatchE(t.Context(), -1)
+
+		require.EqualError(t, err, "batch size must be non-negative, got -1")
+		assert.PanicsWithValue(t, "batch size must be non-negative, got -1", func() {
+			factory.CreateBatch(t.Context(), -1)
+		})
+	})
+}
+
+func TestUnsafeFieldOfFailures(t *testing.T) {
+	// UnsafeFieldOf defers the checks FieldOf makes at construction to build
+	// time, which is the only way to reach these two errors.
+	t.Run("unknown field", func(t *testing.T) {
+		factory := fabricator.New(
+			Person{},
+			fabricator.WithoutFaker[Person](),
+			fabricator.Value(fabricator.UnsafeFieldOf[Person, string]("Nope"), "x"),
+		)
+
+		_, err := factory.BuildE()
+
+		require.EqualError(t, err, `unknown field "Nope"`)
+	})
+
+	t.Run("unexported field", func(t *testing.T) {
+		factory := fabricator.New(
+			hiddenField{},
+			fabricator.WithoutFaker[hiddenField](),
+			fabricator.Value(fabricator.UnsafeFieldOf[hiddenField, string]("name"), "x"),
+		)
+
+		_, err := factory.BuildE()
+
+		require.EqualError(t, err, `field "name" cannot be set`)
+	})
 }

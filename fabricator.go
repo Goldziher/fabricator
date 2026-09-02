@@ -6,6 +6,7 @@ import (
 	mathrand "math/rand"
 	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/go-faker/faker/v4"
@@ -15,27 +16,54 @@ import (
 // Seed makes faker-generated data reproducible, so a test that fails on
 // generated data fails the same way on the next run.
 //
-// Seed sets the process-wide random source used by
-// github.com/go-faker/faker/v4, not a per-factory one, because that is the
-// only seeding faker exposes. Call it once from TestMain rather than from
-// individual tests: a Seed in one test changes the data every later test
-// sees, and concurrent tests calling it race for the same source.
+// Seed sets the process-wide sources used by github.com/go-faker/faker/v4,
+// not per-factory ones, because that is the only seeding faker exposes. Call
+// it once from TestMain, before any test runs:
 //
 //	func TestMain(m *testing.M) {
 //		fabricator.Seed(42)
 //		os.Exit(m.Run())
 //	}
 //
-// The source is safe for concurrent use, so builds may still run in
-// parallel. Their interleaving decides which value each build draws,
-// so seeding alone does not make concurrent builds reproducible.
+// Do not call Seed once builds are under way. Seeding writes faker's package
+// level sources without synchronization, so a Seed running concurrently with
+// any build is a data race that -race reports, not merely a source of
+// surprising values. A single Seed before the builds start is safe: both
+// sources installed here are safe for concurrent use, so builds may then run
+// in parallel. Their interleaving decides which value each build draws, so
+// seeding alone does not make concurrent builds reproducible.
 //
-// Fabricator does not seed by default; without a Seed call faker keeps its
-// own default source.
+// Reproducibility also holds only across runs that generate the same values in
+// the same order. Running a subset with -run, or reordering with -shuffle,
+// starts a test at a different position in the stream.
+//
+// Fabricator does not seed by default; without a Seed call faker keeps its own
+// default sources.
 func Seed(seed int64) {
 	// Deliberately math/rand: this seeds test-data generation, where
 	// reproducibility is the entire point and unpredictability is not wanted.
 	faker.SetRandomSource(faker.NewSafeSource(mathrand.NewSource(seed)))
+	// faker draws UUIDs from a second, independent source, so seeding only the
+	// first leaves every `faker:"uuid_*"` field varying run to run.
+	// G404 is the point: replacing faker's crypto/rand source with a seeded one
+	// is what makes uuid-tagged fields reproducible. No security decision reads
+	// these bytes.
+	faker.SetCryptoSource(&lockedReader{random: mathrand.New(mathrand.NewSource(seed))}) //nolint:gosec
+}
+
+// lockedReader makes a math/rand generator usable as faker's crypto source.
+// faker reads that source from whichever goroutine is building, and
+// *math/rand.Rand is not safe for concurrent use on its own.
+type lockedReader struct {
+	random *mathrand.Rand
+	mu     sync.Mutex
+}
+
+func (reader *lockedReader) Read(buffer []byte) (int, error) {
+	reader.mu.Lock()
+	defer reader.mu.Unlock()
+
+	return reader.random.Read(buffer)
 }
 
 // BuildContext contains metadata for the value currently being built.
@@ -100,8 +128,40 @@ func New[T any](model T, opts ...Option[T]) *Factory[T] {
 	for _, opt := range opts {
 		opt(factory)
 	}
+	factory.defaults = dedupeSetters(factory.defaults)
 
 	return factory
+}
+
+// dedupeSetters keeps only the last configuration for each field, in the order
+// those last configurations appear.
+//
+// Without this, configuring a field twice runs both providers and merely lets
+// the second value win. That is invisible for a plain value, but a superseded
+// provider can have side effects: a Subfactory advances the child factory's
+// counter and throws the result away, and a superseded provider that fails
+// aborts the build even though its value would never have been used.
+func dedupeSetters[T any](setters []fieldSetter[T]) []fieldSetter[T] {
+	if len(setters) < 2 {
+		return setters
+	}
+
+	lastByName := make(map[string]int, len(setters))
+	for index, setter := range setters {
+		lastByName[setter.name] = index
+	}
+	if len(lastByName) == len(setters) {
+		return setters
+	}
+
+	deduped := make([]fieldSetter[T], 0, len(lastByName))
+	for index, setter := range setters {
+		if lastByName[setter.name] == index {
+			deduped = append(deduped, setter)
+		}
+	}
+
+	return deduped
 }
 
 // Extend derives a factory from base, applying opts on top of everything base
@@ -114,14 +174,22 @@ func New[T any](model T, opts ...Option[T]) *Factory[T] {
 //	)
 //	admin := fabricator.Extend(base, fabricator.Value(role, "admin"))
 //
-// Field configuration is applied in order, so an option in opts that targets a
-// field base already configures wins. Hooks are additive: base's hooks run
-// first, then the ones in opts. A persistence handler in opts replaces base's.
+// An option in opts that targets a field base already configures replaces it
+// outright: the base's provider for that field does not run, so a superseded
+// Subfactory does not build a value that is then discarded. Hooks are additive:
+// base's hooks run first, then the ones in opts. A persistence handler in opts
+// replaces base's, and WithFaker undoes an inherited WithoutFaker.
 //
 // The derived factory is independent of base: its counter starts at 0, and
 // configuring either factory afterwards does not affect the other. Values
 // shared by reference, such as a persistence handler or whatever a provider
 // closes over, stay shared.
+//
+// A fresh counter means an inherited provider that derives a unique value from
+// ctx.Iteration no longer produces one across the family: base and every
+// factory derived from it each start at iteration 0, so they generate the same
+// "unique" email or slug. Where that matters, give the derived factory its own
+// provider, or advance its counter with SetCounter.
 //
 // Extend panics if base is nil.
 func Extend[T any](base *Factory[T], opts ...Option[T]) *Factory[T] {
@@ -143,6 +211,7 @@ func Extend[T any](base *Factory[T], opts ...Option[T]) *Factory[T] {
 	for _, opt := range opts {
 		opt(factory)
 	}
+	factory.defaults = dedupeSetters(factory.defaults)
 
 	return factory
 }
@@ -214,6 +283,17 @@ func WithoutFaker[T any]() Option[T] {
 	}
 }
 
+// WithFaker re-enables faker generation. It exists so that a factory derived
+// with Extend from a base that used WithoutFaker can turn generation back on,
+// which is otherwise the one inherited setting a variant could not vary.
+//
+// Faker is enabled by default, so this is only worth passing to Extend.
+func WithFaker[T any]() Option[T] {
+	return func(factory *Factory[T]) {
+		factory.skipFaker = false
+	}
+}
+
 // Sequence returns a provider that cycles through values, one per build,
 // selected by the build's iteration.
 //
@@ -230,6 +310,11 @@ func Sequence[V any](values ...V) FieldProvider[V] {
 	if len(values) == 0 {
 		panic("sequence requires at least one value")
 	}
+
+	// Copied so that passing a slice with s... does not leave the provider
+	// aliasing the caller's slice, where a later write would change what
+	// already-configured factories generate.
+	values = cloneSlice(values)
 
 	return func(ctx BuildContext) V {
 		// SetCounter accepts negative values, and Go's % keeps the sign.
