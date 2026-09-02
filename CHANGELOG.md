@@ -29,7 +29,7 @@ All notable changes to Fabricator are documented in this file.
 
 - Updated `github.com/go-faker/faker/v4` to v4.11.0, `github.com/stretchr/testify` to v1.12.1, and `golang.org/x/text` to v0.41.0.
 - Updated golangci-lint to v2.13.2, the xberg-io reusable validate workflow to v1.11.4, and `github/codeql-action` to v4.37.9.
-- Test coverage raised from 92.1% to 97.2%, with the new APIs verified by mutation testing.
+- Test coverage raised from 92.1% to 97.5%, with the new APIs verified by mutation testing.
 
 ## v2.0.0 - 2026-05-28
 
