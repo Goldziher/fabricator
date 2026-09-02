@@ -3,6 +3,7 @@ package fabricator
 import (
 	"context"
 	"fmt"
+	mathrand "math/rand"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -10,6 +11,32 @@ import (
 	"github.com/go-faker/faker/v4"
 	"github.com/go-faker/faker/v4/pkg/options"
 )
+
+// Seed makes faker-generated data reproducible, so a test that fails on
+// generated data fails the same way on the next run.
+//
+// Seed sets the process-wide random source used by
+// github.com/go-faker/faker/v4, not a per-factory one, because that is the
+// only seeding faker exposes. Call it once from TestMain rather than from
+// individual tests: a Seed in one test changes the data every later test
+// sees, and concurrent tests calling it race for the same source.
+//
+//	func TestMain(m *testing.M) {
+//		fabricator.Seed(42)
+//		os.Exit(m.Run())
+//	}
+//
+// The source is safe for concurrent use, so builds may still run in
+// parallel. Their interleaving decides which value each build draws,
+// so seeding alone does not make concurrent builds reproducible.
+//
+// Fabricator does not seed by default; without a Seed call faker keeps its
+// own default source.
+func Seed(seed int64) {
+	// Deliberately math/rand: this seeds test-data generation, where
+	// reproducibility is the entire point and unpredictability is not wanted.
+	faker.SetRandomSource(faker.NewSafeSource(mathrand.NewSource(seed)))
+}
 
 // BuildContext contains metadata for the value currently being built.
 type BuildContext struct {
@@ -59,6 +86,7 @@ type Factory[T any] struct {
 	afterBuild         []Hook[T]
 	afterCreate        []Hook[T]
 	counter            atomic.Int64
+	skipFaker          bool
 }
 
 // New creates a factory for a non-pointer struct of type T.
@@ -74,6 +102,60 @@ func New[T any](model T, opts ...Option[T]) *Factory[T] {
 	}
 
 	return factory
+}
+
+// Extend derives a factory from base, applying opts on top of everything base
+// is already configured with, so a variant factory does not have to restate
+// the shared configuration.
+//
+//	base := fabricator.New(User{},
+//		fabricator.Value(name, "Moishe"),
+//		fabricator.Value(role, "user"),
+//	)
+//	admin := fabricator.Extend(base, fabricator.Value(role, "admin"))
+//
+// Field configuration is applied in order, so an option in opts that targets a
+// field base already configures wins. Hooks are additive: base's hooks run
+// first, then the ones in opts. A persistence handler in opts replaces base's.
+//
+// The derived factory is independent of base: its counter starts at 0, and
+// configuring either factory afterwards does not affect the other. Values
+// shared by reference, such as a persistence handler or whatever a provider
+// closes over, stay shared.
+//
+// Extend panics if base is nil.
+func Extend[T any](base *Factory[T], opts ...Option[T]) *Factory[T] {
+	if base == nil {
+		panic("cannot extend a nil factory")
+	}
+
+	// Copied at exact length so that appending to the derived factory
+	// reallocates instead of writing into base's backing array.
+	factory := &Factory[T]{
+		persistenceHandler: base.persistenceHandler,
+		defaults:           cloneSlice(base.defaults),
+		fakerOptions:       cloneSlice(base.fakerOptions),
+		afterFaker:         cloneSlice(base.afterFaker),
+		afterBuild:         cloneSlice(base.afterBuild),
+		afterCreate:        cloneSlice(base.afterCreate),
+		skipFaker:          base.skipFaker,
+	}
+	for _, opt := range opts {
+		opt(factory)
+	}
+
+	return factory
+}
+
+func cloneSlice[S any](src []S) []S {
+	if len(src) == 0 {
+		return nil
+	}
+
+	dst := make([]S, len(src))
+	copy(dst, src)
+
+	return dst
 }
 
 // FieldOf creates a typed reference to a field on T.
@@ -107,6 +189,56 @@ func WithPersistenceHandler[T any](handler PersistenceHandler[T]) Option[T] {
 func WithFakerOptions[T any](opts ...options.OptionFunc) Option[T] {
 	return func(factory *Factory[T]) {
 		factory.fakerOptions = append(factory.fakerOptions, opts...)
+	}
+}
+
+// WithoutFaker disables faker generation, so builds start from T's zero value
+// and only the fields the factory configures are populated.
+//
+//	factory := fabricator.New(User{},
+//		fabricator.WithoutFaker[User](),
+//		fabricator.Value(name, "Moishe"),
+//	)
+//	factory.Build() // User{Name: "Moishe", Email: "", Age: 0}
+//
+// Use it when random values in unconfigured fields are noise rather than
+// coverage, such as a fixture asserted field by field, or one whose unset
+// fields must stay empty. It is also substantially faster, since faker's
+// reflective walk over T is what dominates a build.
+//
+// WithFakerOptions has no effect on a factory that skips faker, but AfterFaker
+// hooks still run, in the same position, against the zero value.
+func WithoutFaker[T any]() Option[T] {
+	return func(factory *Factory[T]) {
+		factory.skipFaker = true
+	}
+}
+
+// Sequence returns a provider that cycles through values, one per build,
+// selected by the build's iteration.
+//
+//	fabricator.Field(role, fabricator.Sequence("admin", "editor", "viewer"))
+//
+//	factory.Batch(5) // admin, editor, viewer, admin, editor
+//
+// Because the value is chosen by iteration rather than by a counter of its
+// own, every Sequence on a factory advances in lockstep, and resetting the
+// factory's counter restarts them all.
+//
+// Sequence panics if no values are given.
+func Sequence[V any](values ...V) FieldProvider[V] {
+	if len(values) == 0 {
+		panic("sequence requires at least one value")
+	}
+
+	return func(ctx BuildContext) V {
+		// SetCounter accepts negative values, and Go's % keeps the sign.
+		index := ctx.Iteration % len(values)
+		if index < 0 {
+			index += len(values)
+		}
+
+		return values[index]
 	}
 }
 
@@ -357,8 +489,10 @@ func (factory *Factory[T]) BuildE(overrides ...BuildOption[T]) (T, error) {
 }
 
 func (factory *Factory[T]) buildE(overrides ...BuildOption[T]) (model T, iteration int, err error) {
-	if fakerErr := faker.FakeData(&model, factory.fakerOptions...); fakerErr != nil {
-		return model, 0, fmt.Errorf("error generating fake data: %w", fakerErr)
+	if !factory.skipFaker {
+		if fakerErr := faker.FakeData(&model, factory.fakerOptions...); fakerErr != nil {
+			return model, 0, fmt.Errorf("error generating fake data: %w", fakerErr)
+		}
 	}
 
 	iteration = int(factory.counter.Add(1) - 1)
