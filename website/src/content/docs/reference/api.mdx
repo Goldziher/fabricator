@@ -1,0 +1,89 @@
+---
+title: API reference
+description: Every exported symbol in the fabricator package.
+---
+
+Full generated documentation lives on
+[pkg.go.dev](https://pkg.go.dev/github.com/Goldziher/fabricator/v2). This page
+is the map.
+
+## Constructing
+
+| Symbol | Purpose |
+| --- | --- |
+| `New[T](model T, opts ...Option[T]) *Factory[T]` | Create a factory for a non-pointer struct `T`. |
+| `Extend[T](base *Factory[T], opts ...Option[T]) *Factory[T]` | Derive a variant from an existing factory. |
+| `Seed(seed int64)` | Make generation reproducible, process-wide. |
+
+## Field references
+
+| Symbol | Purpose |
+| --- | --- |
+| `FieldOf[T, V](name string) FieldRef[T, V]` | Typed reference, validated on construction. |
+| `UnsafeFieldOf[T, V](name string) FieldRef[T, V]` | Unvalidated reference; checks move to build time. |
+
+## Factory options
+
+Passed to `New` and `Extend`.
+
+| Symbol | Purpose |
+| --- | --- |
+| `Value[T, V](field, value)` | Set a field to a constant. |
+| `Field[T, V](field, provider)` | Set a field from a provider. |
+| `WithPersistenceHandler[T](handler)` | Enable `Create` and `CreateBatch`. |
+| `WithFakerOptions[T](opts ...options.OptionFunc)` | Configure go-faker. |
+| `WithoutFaker[T]()` | Start builds from the zero value. |
+| `WithFaker[T]()` | Undo an inherited `WithoutFaker`. |
+| `AfterFaker[T](hook)` | Run after generation, before configuration. |
+| `AfterBuild[T](hook)` | Run after defaults and overrides. |
+| `AfterCreate[T](hook)` | Run after persistence. |
+
+## Build options
+
+Passed to `Build`, `Batch`, `Create`, and `CreateBatch`.
+
+| Symbol | Purpose |
+| --- | --- |
+| `Override[T, V](field, value)` | Set a field to a constant for this call. |
+| `OverrideField[T, V](field, provider)` | Set a field from a provider for this call. |
+
+## Providers
+
+| Symbol | Purpose |
+| --- | --- |
+| `Sequence[V](values ...V) FieldProvider[V]` | Cycle values by iteration. |
+| `Subfactory[T](factory) FieldProvider[T]` | Build a nested struct. |
+| `PtrSubfactory[T](factory) FieldProvider[*T]` | Build a nested struct pointer. |
+| `SliceSubfactory[T](factory, size int) FieldProvider[[]T]` | Build a fixed-size slice. |
+| `SubfactoryWith[T](factory, overrides)` | As `Subfactory`, with parent-derived overrides. |
+| `PtrSubfactoryWith[T](factory, overrides)` | As `PtrSubfactory`, with parent-derived overrides. |
+| `SliceSubfactoryWith[T](factory, size, overrides)` | As `SliceSubfactory`, with a dynamic size. |
+
+## Factory methods
+
+| Method | Returns |
+| --- | --- |
+| `Build(opts ...BuildOption[T]) T` | One instance; panics on error. |
+| `BuildE(opts ...BuildOption[T]) (T, error)` | One instance. |
+| `Batch(size int, opts ...) []T` | `size` instances; panics on error. |
+| `BatchE(size int, opts ...) ([]T, error)` | `size` instances. |
+| `Create(ctx, opts ...) T` | Build and persist; panics on error. |
+| `CreateE(ctx, opts ...) (T, error)` | Build and persist. |
+| `CreateBatch(ctx, size int, opts ...) []T` | Build and persist a batch; panics on error. |
+| `CreateBatchE(ctx, size int, opts ...) ([]T, error)` | Build and persist a batch. |
+| `GetCounter() int` | Current iteration counter. |
+| `SetCounter(value int)` | Set the counter. |
+| `ResetCounter()` | Set the counter to 0. |
+
+## Types
+
+| Type | Notes |
+| --- | --- |
+| `Factory[T]` | Built by `New` or `Extend`. |
+| `FieldRef[T, V]` | Opaque typed field reference. |
+| `BuildContext` | `Iteration int`, `FieldName string`. |
+| `FieldProvider[V]` | `func(BuildContext) V`. |
+| `Hook[T]` | `func(*T, BuildContext) error`. |
+| `Option[T]` | `func(*Factory[T])`. |
+| `BuildOption[T]` | `func(*BuildConfig[T])`. |
+| `PersistenceHandler[T]` | `Save` and `SaveMany`, both context-aware. |

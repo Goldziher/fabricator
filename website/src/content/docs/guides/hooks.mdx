@@ -1,0 +1,77 @@
+---
+title: Lifecycle hooks
+description: Running code at three points in a build, and what each point is for.
+---
+
+Hooks receive a pointer to the instance and the build's context, and return an
+error. There are three, one per lifecycle point:
+
+```go
+type Hook[T any] func(*T, BuildContext) error
+```
+
+## AfterFaker
+
+Runs immediately after generation, before any field configuration. It sees a
+fully generated value with none of your configuration applied yet.
+
+```go
+fabricator.AfterFaker(func(person *Person, _ fabricator.BuildContext) error {
+	person.Email = strings.ToLower(person.Email)
+	return nil
+})
+```
+
+On a factory using `WithoutFaker`, it still runs in the same position — against
+the zero value.
+
+## AfterBuild
+
+Runs after defaults and overrides, so it sees the finished value. This is where
+derived fields belong, because it can read whatever the test configured:
+
+```go
+fabricator.AfterBuild(func(person *Person, _ fabricator.BuildContext) error {
+	person.Email = strings.ToLower(person.FirstName) + "@example.com"
+	return nil
+})
+```
+
+It is also the way to reach a nested field, since dotted field paths are not
+supported:
+
+```go
+fabricator.AfterBuild(func(order *Order, _ fabricator.BuildContext) error {
+	order.Address.City = "Tel Aviv"
+	return nil
+})
+```
+
+## AfterCreate
+
+Runs after persistence, against the value the handler returned — so it observes
+whatever the store filled in, such as a generated ID.
+
+```go
+fabricator.AfterCreate(func(person *Person, ctx fabricator.BuildContext) error {
+	return index.Add(ctx.Iteration, person.ID)
+})
+```
+
+For `CreateBatch`, it runs per instance, and each receives the iteration of the
+build it came from.
+
+## Ordering and errors
+
+Hooks of the same kind run in the order they were registered. When a factory is
+[extended](/fabricator/guides/composition/), the base's hooks run before the
+derived factory's.
+
+A hook returning an error aborts the build. The error is wrapped so the failing
+stage is named:
+
+```text
+after build hook failed: email must not be empty
+```
+
+With `Build`, that becomes a panic; with `BuildE`, it is returned.

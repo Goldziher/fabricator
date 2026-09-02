@@ -1,0 +1,186 @@
+---
+title: Fields and values
+description: Typed field references, static values, providers, sequences, and skipping generation.
+---
+
+## Field references
+
+Every way of configuring a field starts with a typed reference:
+
+```go
+firstName := fabricator.FieldOf[Person, string]("FirstName")
+```
+
+`FieldOf[T, V]` panics at the moment you call it if `T` has no field of that
+name, if the field is unexported, or if it does not accept a `V`. That is
+deliberate: the failure belongs at the reference, where the mistake is, rather
+than at a build somewhere else.
+
+Declaring references once as package-level variables keeps call sites short and
+moves the check to package initialisation:
+
+```go
+var (
+	firstName = fabricator.FieldOf[Person, string]("FirstName")
+	lastName  = fabricator.FieldOf[Person, string]("LastName")
+)
+```
+
+### The escape hatch
+
+`UnsafeFieldOf[T, V]` builds a reference without checking anything. The same
+checks then run during `Build`, and surface as a build error rather than a
+panic at construction:
+
+```go
+ref := fabricator.UnsafeFieldOf[Person, string]("Nickname")
+_, err := factory.BuildE() // unknown field "Nickname"
+```
+
+Reach for it only when the field name genuinely is not known statically.
+
+### Embedded and nested fields
+
+Fields promoted from an embedded struct work by their promoted name:
+
+```go
+type Timestamps struct{ CreatedAt time.Time }
+type Post struct {
+	Timestamps
+	Title string
+}
+
+createdAt := fabricator.FieldOf[Post, time.Time]("CreatedAt")
+```
+
+If two embedded structs promote the same name, the reference is ambiguous and
+`FieldOf` reports it as an unknown field, matching Go's own resolution rules.
+
+Dotted paths such as `"Author.Name"` are **not** supported and fail with an
+explicit error. Use an [`AfterBuild` hook](/fabricator/guides/hooks/) to reach
+into a nested value.
+
+## Static values
+
+```go
+fabricator.Value(firstName, "Moishe")
+```
+
+Applies to every build from the factory.
+
+## Providers
+
+`Field` takes a function called once per build, which receives the build's
+context:
+
+```go
+fabricator.Field(email, func(ctx fabricator.BuildContext) string {
+	return fmt.Sprintf("user%d@example.com", ctx.Iteration)
+})
+```
+
+`BuildContext` carries `Iteration`, the zero-based count of builds from this
+factory, and `FieldName`, the field being set. Iteration is consumed after
+faker succeeds and before defaults, overrides, and hooks run.
+
+## Sequences
+
+`Sequence` cycles values by iteration, which is the common case of a provider:
+
+```go
+fabricator.Field(role, fabricator.Sequence("admin", "editor", "viewer"))
+
+factory.Batch(5) // admin, editor, viewer, admin, editor
+```
+
+Because the value is chosen by the factory's iteration rather than by a counter
+of its own, every `Sequence` on a factory advances in lockstep, and
+`ResetCounter` restarts them all together.
+
+`Sequence` copies the values you give it, so mutating the slice you passed does
+not change what the factory generates. It panics if given no values.
+
+## Per-build overrides
+
+`Override` and `OverrideField` are the build-scoped forms of `Value` and
+`Field`:
+
+```go
+factory.Build(fabricator.Override(lastName, "Zuchmir"))
+factory.Batch(3, fabricator.OverrideField(role, fabricator.Sequence("a", "b")))
+```
+
+Overrides are applied after the factory's own configuration, so they win.
+
+## Order of precedence
+
+For a single build, in order:
+
+1. faker fills every field, unless the factory uses `WithoutFaker`
+2. `AfterFaker` hooks run
+3. the factory's `Value` and `Field` configuration is applied
+4. the call's `Override` and `OverrideField` options are applied
+5. `AfterBuild` hooks run
+
+Configuring the same field twice keeps only the last configuration, and the
+superseded one does not run at all. That matters when the superseded provider
+has side effects — a superseded `Subfactory` does not build a child and throw
+it away.
+
+## Nil values
+
+A provider may return `nil` for a field that can hold it — a pointer, slice,
+map, channel, function, or interface. The field is set to its zero value.
+Returning `nil` for any other field is an error:
+
+```go
+field "ID" expects int, got nil
+```
+
+## Skipping generation
+
+`WithoutFaker` turns generation off, so builds start from `T`'s zero value and
+only configured fields are populated:
+
+```go
+factory := fabricator.New(Person{},
+	fabricator.WithoutFaker[Person](),
+	fabricator.Value(firstName, "Moishe"),
+)
+
+factory.Build() // Person{FirstName: "Moishe"}, everything else zero
+```
+
+Use it when random values in unconfigured fields are noise rather than
+coverage. It is also dramatically cheaper, because faker's reflective walk over
+`T` is what a build actually costs.
+
+`AfterFaker` hooks still run in the same position, against the zero value.
+`WithFakerOptions` has no effect on a factory that skips generation, and
+`WithFaker` turns generation back on — useful when
+[extending](/fabricator/guides/composition/) a base that skips it.
+
+## Tuning generation
+
+Faker options pass straight through:
+
+```go
+import "github.com/go-faker/faker/v4/pkg/options"
+
+fabricator.WithFakerOptions[Person](
+	options.WithIgnoreInterface(true),
+	options.WithRandomMapAndSliceMinSize(1),
+)
+```
+
+`WithIgnoreInterface(true)` is worth knowing about: faker cannot generate a
+value for a bare `any` field and fails the build without it.
+
+Faker also honours `faker:"..."` struct tags on the model itself:
+
+```go
+type Person struct {
+	Email string `faker:"email"`
+	ID    string `faker:"uuid_hyphenated"`
+}
+```

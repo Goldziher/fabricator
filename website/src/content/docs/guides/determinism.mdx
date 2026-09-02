@@ -1,0 +1,80 @@
+---
+title: Determinism
+description: Reproducing a failure with Seed, and the exact limits of what it guarantees.
+---
+
+Generated data means a test can fail on a value you cannot see. `Seed` makes
+generation reproducible so the failure comes back.
+
+## Seeding
+
+Seed once, from `TestMain`, before any test runs:
+
+```go
+func TestMain(m *testing.M) {
+	fabricator.Seed(42)
+	os.Exit(m.Run())
+}
+```
+
+Every build in the process now draws from a known sequence, so a failing run
+can be replayed exactly.
+
+Fabricator does not seed by default.
+
+## What Seed actually does
+
+Faker exposes only process-wide sources, not per-factory ones, so `Seed` sets
+process-wide state. It seeds **both** of faker's sources: the general one, and
+the separate one used for `faker:"uuid_*"` fields. Seeding only the first would
+leave every UUID varying run to run — exactly the flake seeding is meant to
+remove.
+
+## Three limits worth knowing
+
+**Do not call `Seed` once builds are running.** Seeding writes faker's
+package-level sources without synchronisation, so a `Seed` racing a build is a
+genuine data race that `-race` reports. One call before the tests start is safe.
+
+**Concurrency defeats it.** Both seeded sources are safe for concurrent use, so
+builds may run in parallel — but their interleaving decides which value each
+build draws. Seeding alone does not make concurrent builds reproducible.
+
+**Run scope matters.** Reproducibility holds across runs that generate the same
+values in the same order. `go test -run TestOne` starts that test at a different
+position in the stream than a full run does, and `-shuffle` changes the order
+outright. A seed reproduces a run, not a test in isolation.
+
+## The stronger alternative
+
+Where a test must not depend on generated values at all, do not generate them.
+`WithoutFaker` starts from the zero value, so every field is either configured
+or empty:
+
+```go
+factory := fabricator.New(User{},
+	fabricator.WithoutFaker[User](),
+	fabricator.Value(name, "Moishe"),
+)
+
+factory.Build() // User{Name: "Moishe"} — nothing else to vary
+```
+
+This is deterministic regardless of seed, run scope, or concurrency, and it is
+far faster. Prefer it for fixtures asserted field by field; keep generation for
+tests that genuinely benefit from varied input.
+
+## The counter
+
+The factory counter is separate from faker's randomness and is always
+deterministic. It is race-safe:
+
+```go
+factory.GetCounter()
+factory.SetCounter(100)
+factory.ResetCounter()
+```
+
+`SetCounter` and `ResetCounter` are safe to call concurrently, but they are not
+coordination primitives: setting the counter while other goroutines are building
+does not make their iterations predictable.

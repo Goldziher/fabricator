@@ -1,0 +1,103 @@
+/* Fabricator's palette: Go cyan for the machine, forge amber for its output.
+   Matches scripts/generate_assets.py so the site and the artwork agree. */
+:root {
+  --sl-color-accent-low: #0b2b38;
+  --sl-color-accent: #00add8;
+  --sl-color-accent-high: #b8ecf8;
+
+  --sl-color-white: #f2f5fa;
+  --sl-color-gray-1: #dfe5ee;
+  --sl-color-gray-2: #b3bdcc;
+  --sl-color-gray-3: #8b97a8;
+  --sl-color-gray-4: #5a6474;
+  --sl-color-gray-5: #2b3446;
+  --sl-color-gray-6: #161d2e;
+  --sl-color-black: #0b1020;
+
+  --fab-cyan: #00add8;
+  --fab-cyan-bright: #7ee8fa;
+  --fab-amber: #f2a93b;
+  --fab-muted: #8b97a8;
+}
+
+:root[data-theme="light"] {
+  --sl-color-accent-low: #cfeef7;
+  --sl-color-accent: #00728f;
+  --sl-color-accent-high: #04303d;
+
+  --sl-color-white: #0b1020;
+  --sl-color-gray-1: #1d2431;
+  --sl-color-gray-2: #333c4b;
+  --sl-color-gray-3: #5a6474;
+  --sl-color-gray-4: #8b97a8;
+  --sl-color-gray-5: #c6cede;
+  --sl-color-gray-6: #e9eef6;
+  --sl-color-gray-7: #f4f7fb;
+  --sl-color-black: #ffffff;
+
+  --fab-cyan: #00728f;
+  --fab-amber: #a86f1d;
+  --fab-muted: #5a6474;
+}
+
+/* The hero echoes the banner: a cool wash on the left where the machine sits,
+   a warm one on the right where its output lands. */
+[data-has-hero] .page {
+  background:
+    radial-gradient(60ch 40ch at 10% -10%, color-mix(in oklch, var(--fab-cyan) 20%, transparent), transparent 70%),
+    radial-gradient(50ch 32ch at 92% -6%, color-mix(in oklch, var(--fab-amber) 14%, transparent), transparent 70%);
+}
+
+.hero .stack a[data-variant="primary"] {
+  background: linear-gradient(120deg, var(--fab-cyan), var(--fab-cyan-bright));
+  border: none;
+  color: #041018;
+  font-weight: 600;
+  box-shadow: 0 8px 30px -12px color-mix(in oklch, var(--fab-cyan) 80%, transparent);
+}
+
+.hero .stack a[data-variant="primary"]:hover {
+  filter: brightness(1.08);
+}
+
+/* The logo is pixel art: never let the browser smooth it. */
+.site-title img,
+.hero > img,
+.hero .hero-html img {
+  image-rendering: pixelated;
+}
+
+.site-title img {
+  height: 1.7rem;
+  width: auto;
+}
+
+.hero > img,
+.hero .hero-html {
+  max-width: 200px;
+  margin-inline: auto;
+}
+
+.card {
+  background: color-mix(in oklch, var(--sl-color-gray-6) 60%, transparent);
+  border: 1px solid var(--sl-color-gray-5);
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.card:hover {
+  border-color: color-mix(in oklch, var(--fab-cyan) 60%, var(--sl-color-gray-5));
+  transform: translateY(-2px);
+}
+
+.card .icon {
+  color: var(--fab-cyan);
+  background: color-mix(in oklch, var(--fab-cyan) 12%, transparent);
+}
+
+.sl-markdown-content table {
+  font-size: var(--sl-text-sm);
+}
+
+.sl-markdown-content th {
+  color: var(--sl-color-white);
+}

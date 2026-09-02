@@ -1,0 +1,53 @@
+---
+title: Installation
+description: Installing Fabricator and the Go version it requires.
+---
+
+```shell
+go get github.com/Goldziher/fabricator/v2
+```
+
+```go
+import "github.com/Goldziher/fabricator/v2"
+```
+
+The package name is `fabricator`, and the import path carries the `/v2` suffix.
+
+## Requirements
+
+Go 1.26 or newer. Fabricator's only runtime dependency is
+[github.com/go-faker/faker/v4](https://github.com/go-faker/faker), which
+generates the values for fields you do not configure.
+
+## Upgrading from v1
+
+v2 is a breaking redesign and a different module path, so both versions can
+coexist while you migrate.
+
+| v1 | v2 |
+| --- | --- |
+| `github.com/Goldziher/fabricator` | `github.com/Goldziher/fabricator/v2` |
+| `map[string]any` defaults and overrides | typed `FieldOf[T, V]` references |
+| `Save(instance) instance` | `Save(ctx, instance) (instance, error)` |
+| `Create()` | `Create(ctx)` |
+| panics only | `BuildE`, `BatchE`, `CreateE`, `CreateBatchE` alongside the panicking forms |
+
+The `map[string]any` API is gone. Where v1 took a map:
+
+```go
+// v1
+factory := fabricator.New(Person{}, map[string]any{"FirstName": "Moishe"})
+```
+
+v2 takes typed options:
+
+```go
+// v2
+firstName := fabricator.FieldOf[Person, string]("FirstName")
+factory := fabricator.New(Person{}, fabricator.Value(firstName, "Moishe"))
+```
+
+Factories are also limited to non-pointer struct model types in v2.
+
+See the [changelog](https://github.com/Goldziher/fabricator/blob/main/CHANGELOG.md)
+for the full list.

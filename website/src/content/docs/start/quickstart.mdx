@@ -1,0 +1,120 @@
+---
+title: Quickstart
+description: Build your first factory, override fields per test, and generate batches.
+---
+
+## A first factory
+
+```go
+package user_test
+
+import (
+	"testing"
+
+	"github.com/Goldziher/fabricator/v2"
+)
+
+type User struct {
+	ID    int
+	Name  string
+	Email string
+	Admin bool
+}
+
+var (
+	userID    = fabricator.FieldOf[User, int]("ID")
+	userName  = fabricator.FieldOf[User, string]("Name")
+	userAdmin = fabricator.FieldOf[User, bool]("Admin")
+)
+
+func userFactory() *fabricator.Factory[User] {
+	return fabricator.New(User{},
+		fabricator.Field(userID, func(ctx fabricator.BuildContext) int {
+			return ctx.Iteration + 1
+		}),
+	)
+}
+```
+
+`New` takes a zero value of the model — it is there to infer `T`, not to supply
+data. `Field` takes a provider that receives a `BuildContext`, whose `Iteration`
+counts builds from this factory starting at 0.
+
+## Build one
+
+```go
+user := userFactory().Build()
+// ID is 1. Name, Email, and Admin are generated.
+```
+
+## Override per test
+
+`Build` takes options that apply to that call only:
+
+```go
+func TestAdminCanDelete(t *testing.T) {
+	admin := userFactory().Build(fabricator.Override(userAdmin, true))
+	// Admin is true. Everything else is still generated.
+}
+```
+
+The test states the one thing it depends on. It keeps compiling and keeps
+passing when `User` grows a field.
+
+## Build many
+
+```go
+factory := userFactory()
+users := factory.Batch(3)
+// IDs 1, 2, 3 — the counter advances once per build.
+```
+
+`Batch` applies its options to every instance, and providers still see each
+build's own iteration:
+
+```go
+users := factory.Batch(3, fabricator.Override(userName, "Moishe"))
+// all named Moishe, IDs still 1, 2, 3
+```
+
+## Cycle through values
+
+```go
+role := fabricator.FieldOf[User, string]("Role")
+
+factory := fabricator.New(User{},
+	fabricator.Field(role, fabricator.Sequence("admin", "editor", "viewer")),
+)
+
+factory.Batch(5) // admin, editor, viewer, admin, editor
+```
+
+## Handle errors instead of panicking
+
+`Build`, `Batch`, `Create`, and `CreateBatch` panic on failure, which keeps test
+bodies terse. Each has an `E` twin that returns an error instead:
+
+```go
+user, err := factory.BuildE()
+users, err := factory.BatchE(10)
+```
+
+## Exact fixtures
+
+When a test asserts field by field, generated values in the fields it does not
+set are noise. `WithoutFaker` starts from the zero value:
+
+```go
+factory := fabricator.New(User{},
+	fabricator.WithoutFaker[User](),
+	fabricator.Value(userName, "Moishe"),
+)
+
+factory.Build() // User{ID: 0, Name: "Moishe", Email: "", Admin: false}
+```
+
+## Next
+
+- [Fields and values](/fabricator/guides/fields/) — every way to configure a field
+- [Factories from factories](/fabricator/guides/composition/) — `Extend` and subfactories
+- [Determinism](/fabricator/guides/determinism/) — reproducing a failure

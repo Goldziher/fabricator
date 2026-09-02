@@ -5,16 +5,16 @@ final_newline = true
 trim_trailing_whitespace = true
 
 [discovery]
-exclude = ["**/*.lock", "**/go.sum"]
+exclude = ["**/*.lock", "**/go.sum", "**/package-lock.json"]
 
 [hooks]
 stages = ["pre-commit"]
 
 [hooks.builtin]
 commit = { stages = ["commit-msg"] }
-file_safety = { exclude = ["**/*.lock", "**/go.sum"] }
-lint = { exclude = ["**/*.lock", "**/go.sum"] }
-fmt = { exclude = ["**/*.lock", "**/go.sum"] }
+file_safety = { exclude = ["**/*.lock", "**/go.sum", "**/package-lock.json"] }
+lint = { exclude = ["**/*.lock", "**/go.sum", "**/package-lock.json"] }
+fmt = { exclude = ["**/*.lock", "**/go.sum", "**/package-lock.json"] }
 
 [lint.markdown.rumdl]
 disable = ["MD033"]
@@ -41,3 +41,10 @@ id = "ai-rulez"
 git = "https://github.com/Goldziher/ai-rulez.git"
 revision = "v4.9.3"
 hooks = ["ai-rulez-validate"]
+
+[per-file-ignores]
+# Table-driven subtests make for long test functions and a long test file on
+# purpose; splitting them to satisfy a length rule would not help a reader.
+"*_test.go" = ["function-too-long", "file-too-long"]
+# A generator script reports what it wrote; that is its interface.
+"scripts/*.py" = ["T201"]

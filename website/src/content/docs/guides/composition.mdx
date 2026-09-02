@@ -1,0 +1,114 @@
+---
+title: Factories from factories
+description: Deriving variant factories with Extend, and nesting factories with subfactories.
+---
+
+## Extend
+
+A variant factory usually differs from a base in one or two fields. `Extend`
+derives it without restating the rest:
+
+```go
+base := fabricator.New(User{},
+	fabricator.Value(name, "Moishe"),
+	fabricator.Value(role, "user"),
+	fabricator.WithPersistenceHandler[User](handler),
+)
+
+admin := fabricator.Extend(base, fabricator.Value(role, "admin"))
+```
+
+`admin` keeps the name, the handler, the faker options, and the hooks, and
+changes only the role.
+
+### What is inherited
+
+| | Behaviour |
+| --- | --- |
+| Field configuration | Inherited. An option targeting a field the base already configures **replaces** it — the base's provider does not run. |
+| Hooks | Additive. The base's hooks run first, then the derived ones. |
+| Persistence handler | Inherited; a handler in `opts` replaces it. |
+| Faker options | Inherited; derived options are appended. |
+| `WithoutFaker` | Inherited; `WithFaker` turns generation back on. |
+| Counter | **Not** inherited. The derived factory starts at 0. |
+
+The derived factory is independent: configuring either afterwards does not
+affect the other, and two factories derived from one base cannot disturb each
+other. Values shared by reference — a persistence handler, or whatever a
+provider closes over — stay shared, as they would anywhere else in Go.
+
+### The counter caveat
+
+A fresh counter is usually what you want, but it has one sharp edge. If the base
+derives a unique value from `ctx.Iteration`, that value stops being unique
+across the family:
+
+```go
+base := fabricator.New(User{},
+	fabricator.Field(email, func(ctx fabricator.BuildContext) string {
+		return fmt.Sprintf("user%d@example.com", ctx.Iteration)
+	}),
+)
+admin := fabricator.Extend(base, fabricator.Value(role, "admin"))
+
+base.Build().Email  // user0@example.com
+admin.Build().Email // user0@example.com — the same address
+```
+
+Base and every derived factory each start at iteration 0. Where uniqueness
+matters, give the derived factory its own provider, or move it along with
+`SetCounter`.
+
+`Extend` panics if the base is nil.
+
+## Subfactories
+
+A factory can supply a field of another struct type. There are three forms,
+matching the three shapes a nested field takes:
+
+```go
+petFactory := fabricator.New(Pet{}, fabricator.Value(petName, "Flippy"))
+
+personFactory := fabricator.New(Person{},
+	// Pet
+	fabricator.Field(favoritePet, fabricator.Subfactory(petFactory)),
+	// *Pet
+	fabricator.Field(profile, fabricator.PtrSubfactory(profileFactory)),
+	// []Pet
+	fabricator.Field(pets, fabricator.SliceSubfactory(petFactory, 2)),
+)
+```
+
+Each nested build advances the child factory's own counter, so a child provider
+using `ctx.Iteration` numbers children, not parents.
+
+### Deriving children from the parent
+
+The `*With` variants take a function of the parent's `BuildContext`, so a child
+can depend on the parent being built:
+
+```go
+fabricator.Field(profile, fabricator.PtrSubfactoryWith(profileFactory,
+	func(ctx fabricator.BuildContext) []fabricator.BuildOption[Profile] {
+		return []fabricator.BuildOption[Profile]{
+			fabricator.Override(reason, fmt.Sprintf("parent-%d", ctx.Iteration)),
+		}
+	},
+))
+```
+
+`SliceSubfactoryWith` additionally takes the size as a function, so the number
+of children can vary per parent:
+
+```go
+fabricator.Field(pets, fabricator.SliceSubfactoryWith(petFactory,
+	func(ctx fabricator.BuildContext) int { return ctx.Iteration % 3 },
+	nil, // no per-child overrides
+))
+```
+
+Pass `nil` for the overrides function when the children need no customisation.
+
+Every subfactory helper panics immediately if given a nil factory, and
+`SliceSubfactoryWith` panics if the size function is nil, rather than failing
+later during a build.

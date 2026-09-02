@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://goldziher.github.io/fabricator/sitemap-index.xml

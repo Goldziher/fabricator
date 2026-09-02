@@ -1,0 +1,108 @@
+---
+title: Persistence
+description: Building and saving in one step with a PersistenceHandler.
+---
+
+Give a factory a handler and `Create` builds and saves in one step.
+
+## The interface
+
+```go
+type PersistenceHandler[T any] interface {
+	Save(ctx context.Context, instance T) (T, error)
+	SaveMany(ctx context.Context, instances []T) ([]T, error)
+}
+```
+
+Both methods return the persisted values, so a store that assigns IDs or
+timestamps can hand back what it actually wrote.
+
+## Wiring it up
+
+```go
+type userStore struct{ db *sql.DB }
+
+func (s userStore) Save(ctx context.Context, user User) (User, error) {
+	row := s.db.QueryRowContext(ctx,
+		"INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id",
+		user.Name, user.Email,
+	)
+	if err := row.Scan(&user.ID); err != nil {
+		return User{}, err
+	}
+	return user, nil
+}
+
+func (s userStore) SaveMany(ctx context.Context, users []User) ([]User, error) {
+	saved := make([]User, 0, len(users))
+	for _, user := range users {
+		created, err := s.Save(ctx, user)
+		if err != nil {
+			return nil, err
+		}
+		saved = append(saved, created)
+	}
+	return saved, nil
+}
+
+factory := fabricator.New(User{},
+	fabricator.WithPersistenceHandler[User](userStore{db: db}),
+)
+```
+
+## Creating
+
+```go
+user := factory.Create(ctx)
+users := factory.CreateBatch(ctx, 10)
+
+user, err := factory.CreateE(ctx)
+users, err := factory.CreateBatchE(ctx, 10)
+```
+
+`Create` takes the same build options as `Build`:
+
+```go
+admin := factory.Create(ctx, fabricator.Override(role, "admin"))
+```
+
+`CreateBatch` builds the whole batch first, then calls `SaveMany` once, so a
+handler can use a single statement or a transaction.
+
+## Errors
+
+Calling `Create` or `CreateBatch` on a factory with no handler fails:
+
+```text
+cannot call .Create on a factory without a persistence handler
+```
+
+A handler's own error is wrapped with the stage that failed:
+
+```text
+persistence save failed: connection refused
+persistence save many failed: connection refused
+```
+
+The context you pass is handed to the handler untouched, so cancellation and
+deadlines behave the way the store expects.
+
+## Cleanup
+
+Fabricator does not track what it created and has no teardown of its own. Use
+whatever the test already uses — a transaction rolled back in `t.Cleanup`, a
+truncate, or a disposable schema:
+
+```go
+func TestSomething(t *testing.T) {
+	tx, err := db.BeginTx(t.Context(), nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback() })
+
+	factory := fabricator.New(User{},
+		fabricator.WithPersistenceHandler[User](userStore{db: tx}),
+	)
+	user := factory.Create(t.Context())
+	// ...
+}
+```

@@ -1,0 +1,76 @@
+---
+title: Introduction
+description: What Fabricator is, the problem it solves, and when to reach for it.
+---
+
+Fabricator builds typed test data for Go structs. You describe the fields a test
+actually cares about; everything else is generated.
+
+## The problem
+
+Test data written by hand says too much. A test about expired subscriptions
+needs one field to be a date in the past, but the struct literal makes you spell
+out a name, an email, an ID, and a billing address as well. The one field that
+matters is buried, and every new field on the struct means editing every literal
+that constructs it.
+
+Fabricator inverts that. A factory generates a complete, valid value, and the
+test overrides only what it is about:
+
+```go
+expired := factory.Build(fabricator.Override(renewsAt, time.Now().Add(-time.Hour)))
+```
+
+Adding a field to `Subscription` does not touch this test.
+
+## Typed, not stringly typed
+
+Field configuration goes through a typed reference:
+
+```go
+renewsAt := fabricator.FieldOf[Subscription, time.Time]("RenewsAt")
+```
+
+`FieldOf[T, V]` verifies, at the moment you construct it, that `T` has a field
+called `RenewsAt`, that it is exported, and that it accepts a `time.Time`. A
+typo or a changed field type fails right there with a clear message, instead of
+silently doing nothing until an assertion fails somewhere else.
+
+`UnsafeFieldOf` skips those checks and defers them to build time. It is the
+escape hatch for the rare case where the field name is not known statically.
+
+## What generation costs
+
+Unconfigured fields are filled by
+[go-faker](https://github.com/go-faker/faker). That is convenient, and it is
+also the overwhelming majority of what a build costs — faker walks `T`
+reflectively and generates a value for every field.
+
+When a test wants exact fixtures rather than plausible ones,
+[`WithoutFaker`](/fabricator/guides/fields/#skipping-generation) starts from the
+zero value instead. It is both clearer and around three orders of magnitude
+cheaper:
+
+| | ns/op | B/op | allocs/op |
+| --- | --- | --- | --- |
+| `Build` | 186,106 | 81,153 | 1,807 |
+| `Build` with `WithoutFaker` | 124 | 184 | 4 |
+
+<small>`go test -bench .` on an Apple M4 Pro, Go 1.27, against the `Person`
+fixture in the test suite. Your numbers depend entirely on how large and how
+nested your struct is.</small>
+
+## When not to use it
+
+Fabricator is for non-pointer struct types. It does not support nested dotted
+field paths such as `"Address.City"` — use a
+[hook](/fabricator/guides/hooks/) to reach into a nested value.
+
+If a test needs one struct with three fields set, a plain struct literal is
+still the clearest thing to write. Factories earn their keep when the same type
+is built many times, in many shapes, across many tests.
+
+## Next
+
+- [Installation](/fabricator/start/installation/)
+- [Quickstart](/fabricator/start/quickstart/)

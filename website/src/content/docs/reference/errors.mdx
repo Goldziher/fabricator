@@ -1,0 +1,72 @@
+---
+title: Errors and panics
+description: Which failures panic, which are returned, and what each message means.
+---
+
+## The two forms
+
+Every build and persistence method comes in two forms. The bare form panics; the
+`E` form returns an error. They are otherwise identical.
+
+| Panics | Returns an error |
+| --- | --- |
+| `Build` | `BuildE` |
+| `Batch` | `BatchE` |
+| `Create` | `CreateE` |
+| `CreateBatch` | `CreateBatchE` |
+
+The panicking forms exist so a test body reads as the test, not as error
+handling. Use the `E` forms when a failure is what you are asserting, or when
+building outside a test.
+
+## Panics at construction
+
+These fire while you are wiring a factory up, not while building, because the
+mistake is in the wiring:
+
+| Message | Cause |
+| --- | --- |
+| `unsupported value: model must be a non-pointer struct` | `New` given a pointer, interface, or non-struct. |
+| `unknown field "X"` | `FieldOf` naming a field `T` does not have, or an ambiguous embedded name. |
+| `field "X" cannot be set` | `FieldOf` naming an unexported field. |
+| `field "X" expects int, got string` | `FieldOf`'s `V` is not assignable to the field. |
+| `nested field paths are not supported: "A.B"` | A dotted path. Use an `AfterBuild` hook. |
+| `cannot extend a nil factory` | `Extend` given nil. |
+| `subfactory cannot use a nil factory` | A subfactory helper given nil. |
+| `subfactory size function cannot be nil` | `SliceSubfactoryWith` given a nil size function. |
+| `sequence requires at least one value` | `Sequence` given no values. |
+
+## Errors at build time
+
+Returned by the `E` forms, and panicked by the bare forms:
+
+| Message | Cause |
+| --- | --- |
+| `error generating fake data: ...` | Faker could not generate a value. A bare `any` field is the usual cause — pass `options.WithIgnoreInterface(true)`. |
+| `unknown field "X"` | An `UnsafeFieldOf` reference to a field that does not exist. |
+| `field "X" cannot be set` | An `UnsafeFieldOf` reference to an unexported field. |
+| `field "X" expects int, got string` | A provider returned the wrong type. |
+| `field "X" expects int, got nil` | A provider returned nil for a field that cannot hold it. |
+| `batch size must be non-negative, got -1` | A negative `Batch` or `CreateBatch` size. |
+| `after faker hook failed: ...` | An `AfterFaker` hook returned an error. |
+| `after build hook failed: ...` | An `AfterBuild` hook returned an error. |
+| `after create hook failed: ...` | An `AfterCreate` hook returned an error. |
+| `cannot call .Create on a factory without a persistence handler` | `Create` with no handler. |
+| `cannot call .CreateBatch on a factory without a persistence handler` | `CreateBatch` with no handler. |
+| `persistence save failed: ...` | The handler's `Save` returned an error. |
+| `persistence save many failed: ...` | The handler's `SaveMany` returned an error. |
+
+Wrapped causes are joined with `%w`, so `errors.Is` and `errors.As` reach the
+handler's or hook's original error:
+
+```go
+_, err := factory.CreateE(ctx)
+if errors.Is(err, sql.ErrConnDone) {
+	// ...
+}
+```
+
+## A note on batch size
+
+`Batch(0)` and `CreateBatch(ctx, 0)` are valid and return an empty slice. Only
+negative sizes are an error.

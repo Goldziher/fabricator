@@ -1,0 +1,36 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 256 256"
+  width="256"
+  height="256"
+  role="img"
+  aria-label="Fabricator"
+  shape-rendering="crispEdges"
+>
+  <title>Fabricator</title>
+
+  <rect x="112" y="16" width="32" height="16" fill="#7ee8fa" />
+  <rect x="80" y="32" width="96" height="16" fill="#7ee8fa" />
+  <rect x="48" y="48" width="160" height="16" fill="#7ee8fa" />
+  <rect x="16" y="64" width="224" height="16" fill="#7ee8fa" />
+  <rect x="16" y="80" width="224" height="16" fill="#7ee8fa" />
+  <rect x="16" y="96" width="32" height="16" fill="#00add8" />
+  <rect x="48" y="96" width="160" height="16" fill="#7ee8fa" />
+  <rect x="208" y="96" width="32" height="16" fill="#00728f" />
+  <rect x="16" y="112" width="64" height="16" fill="#00add8" />
+  <rect x="80" y="112" width="96" height="16" fill="#7ee8fa" />
+  <rect x="176" y="112" width="64" height="16" fill="#00728f" />
+  <rect x="16" y="128" width="96" height="16" fill="#00add8" />
+  <rect x="112" y="128" width="32" height="16" fill="#7ee8fa" />
+  <rect x="144" y="128" width="96" height="16" fill="#00728f" />
+  <rect x="16" y="144" width="112" height="16" fill="#00add8" />
+  <rect x="128" y="144" width="112" height="16" fill="#00728f" />
+  <rect x="16" y="160" width="112" height="16" fill="#00add8" />
+  <rect x="128" y="160" width="112" height="16" fill="#00728f" />
+  <rect x="48" y="176" width="80" height="16" fill="#00add8" />
+  <rect x="128" y="176" width="80" height="16" fill="#00728f" />
+  <rect x="80" y="192" width="48" height="16" fill="#00add8" />
+  <rect x="128" y="192" width="48" height="16" fill="#00728f" />
+  <rect x="112" y="208" width="16" height="16" fill="#00add8" />
+  <rect x="128" y="208" width="16" height="16" fill="#00728f" />
+</svg>

@@ -3,6 +3,10 @@ node_modules/
 coverage.out
 .ai-rulez/.generated-manifest.json
 
+# Astro docs site
+website/dist/
+website/.astro/
+
 # BEGIN ai-rulez (DO NOT EDIT - managed by ai-rulez)
 .claude/
 .codex/
