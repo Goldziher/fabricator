@@ -8,19 +8,22 @@ website/dist/
 website/.astro/
 
 # BEGIN ai-rulez (DO NOT EDIT - managed by ai-rulez)
+.agents/skills/
+.ai-rulez/.generated-manifest.local.json
+.ai-rulez/local/
 .claude/agents/
-.claude/plugins.json
-.claude/settings.json
 .claude/skills/
 .codex/agents/
-.codex/commands/
-.codex/plugins.json
-.codex/skills/
+.codex/config.toml
 .mcp.json
 .opencode/agents/
-.opencode/skills/
+.opencode/commands/
+.pi/agents/
+.pi/mcp.json
+.pi/prompts/
 AGENTS.md
 CLAUDE.md
+opencode.json
 # END ai-rulez
 
 poly.local.toml

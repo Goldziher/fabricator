@@ -17,10 +17,10 @@ lint = { exclude = ["**/*.lock", "**/go.sum", "**/package-lock.json"] }
 fmt = { exclude = ["**/*.lock", "**/go.sum", "**/package-lock.json"] }
 
 [lint.markdown.rumdl]
-disable = ["MD033"]
+disable = ["MD025", "MD033"]
 
 [fmt.markdown.rumdl]
-disable = ["MD033"]
+disable = ["MD025", "MD033"]
 
 [tools.golangci-lint]
 enabled = true
