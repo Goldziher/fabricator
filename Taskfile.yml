@@ -44,7 +44,7 @@ tasks:
       - go vet ./...
       - golangci-lint run --timeout=5m
       - govulncheck ./...
-      - npx -y ai-rulez@latest validate
+      - pnpm dlx ai-rulez@latest validate
 
   format:
     desc: Format Go code
@@ -54,4 +54,4 @@ tasks:
   generate:
     desc: Generate ai-rulez configuration files
     cmds:
-      - npx -y ai-rulez@latest generate
+      - pnpm dlx ai-rulez@latest generate

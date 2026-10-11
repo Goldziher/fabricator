@@ -4,9 +4,9 @@ The [Starlight](https://starlight.astro.build) site published to
 <https://goldziher.github.io/fabricator/>.
 
 ```shell
-npm install
-npm run dev     # local preview
-npm run build   # static build into dist/
+pnpm install
+pnpm run dev     # local preview
+pnpm run build   # static build into dist/
 ```
 
 Deployed by `.github/workflows/docs.yaml` on every push to `main` that touches
