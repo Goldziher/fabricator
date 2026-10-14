@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   validate:
-    uses: xberg-io/actions/.github/workflows/reusable-validate.yml@v1.11.4
+    uses: xberg-io/actions/.github/workflows/reusable-validate.yml@v1.23.0
 
   test:
     runs-on: ubuntu-latest
@@ -83,8 +83,8 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4.37.9
+        uses: github/codeql-action/init@v4.38.2
         with:
           languages: go
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4.37.9
+        uses: github/codeql-action/analyze@v4.38.2
