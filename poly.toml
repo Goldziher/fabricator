@@ -5,16 +5,49 @@ final_newline = true
 trim_trailing_whitespace = true
 
 [discovery]
-exclude = ["**/*.lock", "**/go.sum", "**/package-lock.json"]
+exclude = [
+  ".ai-rulez.bak-okf-*/**",
+  "/AGENTS.md",
+  "/CLAUDE.md",
+  "/.ai-rulez/.generated-manifest.json",
+  "/.mcp.json",
+  "**/*.lock",
+  "**/go.sum",
+  "**/package-lock.json",
+]
 
 [hooks]
 stages = ["pre-commit"]
 
 [hooks.builtin]
 commit = { stages = ["commit-msg"] }
-file_safety = { exclude = ["**/*.lock", "**/go.sum", "**/package-lock.json"] }
-lint = { exclude = ["**/*.lock", "**/go.sum", "**/package-lock.json"] }
-fmt = { exclude = ["**/*.lock", "**/go.sum", "**/package-lock.json"] }
+file_safety = { exclude = [
+  "/AGENTS.md",
+  "/CLAUDE.md",
+  "/.ai-rulez/.generated-manifest.json",
+  "/.mcp.json",
+  "**/*.lock",
+  "**/go.sum",
+  "**/package-lock.json",
+] }
+lint = { exclude = [
+  "/AGENTS.md",
+  "/CLAUDE.md",
+  "/.ai-rulez/.generated-manifest.json",
+  "/.mcp.json",
+  "**/*.lock",
+  "**/go.sum",
+  "**/package-lock.json",
+] }
+fmt = { exclude = [
+  "/AGENTS.md",
+  "/CLAUDE.md",
+  "/.ai-rulez/.generated-manifest.json",
+  "/.mcp.json",
+  "**/*.lock",
+  "**/go.sum",
+  "**/package-lock.json",
+] }
 
 [lint.markdown.rumdl]
 disable = ["MD025", "MD033"]
@@ -39,7 +72,7 @@ preserve_patterns = ["SAFETY", "HACK", "WORKAROUND", "NOTE", "Copyright", "Licen
 [[hooks.sources]]
 id = "ai-rulez"
 git = "https://github.com/Goldziher/ai-rulez.git"
-revision = "v4.9.3"
+revision = "v5.3.0"
 hooks = ["ai-rulez-validate"]
 
 [per-file-ignores]

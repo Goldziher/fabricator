@@ -44,7 +44,7 @@ tasks:
       - go vet ./...
       - golangci-lint run --timeout=5m
       - govulncheck ./...
-      - pnpm dlx ai-rulez@latest validate
+      - ai-rulez validate
 
   format:
     desc: Format Go code
@@ -54,4 +54,17 @@ tasks:
   generate:
     desc: Generate ai-rulez configuration files
     cmds:
-      - pnpm dlx ai-rulez@latest generate
+      - ai-rulez generate
+
+  governance:generate:
+    desc: Generate native AI governance outputs
+    cmds:
+      - ai-rulez generate --no-local --strict-config
+
+  governance:check:
+    desc: Validate native AI governance and freshness
+    cmds:
+      - ai-rulez migrate okf --check
+      - ai-rulez validate --strict --no-local
+      - ai-rulez lock --check
+      - ai-rulez generate --check --no-local --strict-config

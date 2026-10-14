@@ -1,0 +1,78 @@
+# ai-rulez.lock: pins remote includes, installed skills and authored content. Commit this file.
+# Refresh it with `ai-rulez lock`; `ai-rulez generate --locked` fails when it is stale.
+
+version = 1
+ai_rulez_version = '5.3.0'
+scope = 'all'
+tree = 'sha256:e784771a712fd949b8811a1ff728e56f2e06734c8b86e48abe37c65508f91ec2'
+
+[[served]]
+name = 'code-quality-standards'
+source = 'builtin://universal/code-quality/skills/code-quality-standards/SKILL.md'
+commit = ''
+digest = 'sha256:0126cc7c038b3e343ee56866949865dd799bde0de4884ba0bdfeb28655fa8134'
+
+[[served]]
+name = 'dependency-awareness'
+source = 'builtin://universal/security/skills/dependency-awareness/SKILL.md'
+commit = ''
+digest = 'sha256:e108ed344fe20948fcbda61b96266026bb9b2318df089964c088c0455294f8d3'
+
+[[served]]
+name = 'error-handling'
+source = 'builtin://universal/code-quality/skills/error-handling/SKILL.md'
+commit = ''
+digest = 'sha256:fddb5f980e8d98c91b459be578cdea7e0fc765d8219f66088892e936f0d1e349'
+
+[[served]]
+name = 'go-conventions'
+source = 'builtin://languages/go/skills/go-conventions/SKILL.md'
+commit = ''
+digest = 'sha256:d4476ba547378d20d11369f89ae4348b2de3ee9fbbc0a59c6a882fffeda351ce'
+
+[[served]]
+name = 'incremental-approach'
+source = 'builtin://universal/token-efficiency/skills/incremental-approach/SKILL.md'
+commit = ''
+digest = 'sha256:ff56cbdc4813ee427a3b6f7d23f6b41b82b7c3cc8dc2b64ccd256a90e75e02f8'
+
+[[served]]
+name = 'iterate'
+source = ''
+commit = ''
+digest = 'sha256:5cb87728d1449fadda6d8557501fcc0823509c60a37058ce4d2dda123296f67c'
+
+[[served]]
+name = 'owasp-quick-reference'
+source = 'builtin://universal/security/skills/owasp-quick-reference/SKILL.md'
+commit = ''
+digest = 'sha256:de4f3b595b88e88d7bff0c342b5253637d08d79b3baebe888bd465f133ff512c'
+
+[[served]]
+name = 'parallelize'
+source = ''
+commit = ''
+digest = 'sha256:2700d984ba10baa2e16ed19b48cc8fd5f7351776f2ce03f6712394d3912f91cb'
+
+[[served]]
+name = 'task-runner'
+source = 'builtin://universal/token-efficiency/skills/task-runner/SKILL.md'
+commit = ''
+digest = 'sha256:9f3cadda648798b049869c463d7a69f6f7b5953bcad2a43ea02e645d1ec3e19b'
+
+[[served]]
+name = 'tdd-workflow'
+source = 'builtin://universal/testing/skills/tdd-workflow/SKILL.md'
+commit = ''
+digest = 'sha256:90ddeb170606792596979de6444904f88b5fbcdc52ea2462109401865d17f6ec'
+
+[[served]]
+name = 'testing-conventions'
+source = 'builtin://universal/testing/skills/testing-conventions/SKILL.md'
+commit = ''
+digest = 'sha256:562385aa3c563ffbf327d6776932b43175052b00ec4418695ed6c50c335f1686'
+
+[[item]]
+kind = 'settings'
+id = 'mcp-servers'
+digest = 'sha256:4a4c516b2da48a3fee1a825a42127eef3c316be085a4f48fcf6103956992b2f8'
