@@ -203,12 +203,12 @@ nested value.
 ## Development
 
 ```shell
-task setup      # tooling and git hooks
-task test       # go test ./...
-task test:race  # go test -race ./...
-task check      # vet, golangci-lint, govulncheck, ai-rulez
-task lint       # poly lint and format check
-task update     # dependencies, git hooks, and GitHub Actions
+mise run setup      # tooling and git hooks
+mise run test       # go test ./...
+mise run test:race  # go test -race ./...
+mise run check      # vet, golangci-lint, govulncheck, ai-rulez
+mise run lint       # poly lint and format check
+mise run update     # dependencies, git hooks, and GitHub Actions
 ```
 
 Brand assets are generated, not hand-committed:
