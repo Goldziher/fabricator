@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: xberg-io/actions/setup-ai-rulez@c961bc96f87f018a3acbda2751dbdb69f7a3c958
-      - uses: xberg-io/actions/validate-ai-rulez@c961bc96f87f018a3acbda2751dbdb69f7a3c958
+      - uses: xberg-io/actions/setup-ai-rulez@v1
+      - uses: xberg-io/actions/validate-ai-rulez@v1
         with:
           expected-config-count: "1"
