@@ -1,0 +1,15 @@
+# Versions follow the xberg-io/toolchains baseline named in toolchains.toml. golangci-lint, govulncheck and
+# gh-actions-updater are repository-owned. ~keep
+[settings]
+lockfile = true
+lockfile_platforms = ["linux-x64", "linux-arm64", "macos-arm64", "windows-x64"]
+
+[tools]
+go = "1.27.3"
+node = "26.12.1"
+pnpm = "12.15.0"
+"github:Goldziher/poly" = "0.31.2"
+# 2.13 cannot read Go 1.27 export data; 2.14 is the first release built with Go 1.27. ~keep
+"aqua:golangci/golangci-lint" = "2.15.0"
+"go:golang.org/x/vuln/cmd/govulncheck" = "1.9.0"
+"github:Goldziher/gh-actions-updater" = "0.3.1"
