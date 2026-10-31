@@ -13,3 +13,47 @@ pnpm = "12.15.0"
 "aqua:golangci/golangci-lint" = "2.15.0"
 "go:golang.org/x/vuln/cmd/govulncheck" = "1.9.0"
 "github:Goldziher/gh-actions-updater" = "0.3.1"
+
+[tasks.setup]
+description = "Set up the development environment"
+run = ["mise install", { task = "governance:hooks:install" }, "go mod download"]
+
+[tasks.update]
+description = "Update dependencies, git hooks, and GitHub Actions"
+run = ["poly hooks update", "gau --recursive --update .", "go get -u ./...", "go mod tidy"]
+
+[tasks.test]
+description = "Run tests"
+run = "go test ./..."
+
+[tasks."test:race"]
+description = "Run tests with the race detector"
+run = "go test -race ./..."
+
+[tasks.lint]
+description = "Lint and format-check every file with poly"
+run = ["poly lint .", "poly fmt --check ."]
+
+[tasks.check]
+description = "Run Go checks"
+run = ["go vet ./...", "golangci-lint run --timeout=5m", "govulncheck ./...", "npx -y ai-rulez@latest validate"]
+
+[tasks.format]
+description = "Format Go code"
+run = "go fmt ./..."
+
+[tasks."governance:generate"]
+description = "Generate native AI governance outputs"
+run = "npx -y ai-rulez@latest generate --no-local --strict-config"
+
+[tasks."governance:check"]
+description = "Validate native AI governance and freshness"
+run = [
+  "npx -y ai-rulez@latest migrate okf --check",
+  "npx -y ai-rulez@latest validate --strict --no-local",
+  "npx -y ai-rulez@latest lock --check",
+  "npx -y ai-rulez@latest generate --check --no-local --strict-config",
+]
+
+[task_config]
+includes = ["mise-tasks", "mise-tasks/shared.toml"]
