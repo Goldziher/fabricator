@@ -2,6 +2,12 @@
 
 All notable changes to Fabricator are documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- Minimum supported versions raised: Go 1.27.
+
 ## v2.1.0 - 2026-09-02
 
 Four additions aimed at the parts of a factory that were previously awkward: pinning generation so a failure reproduces, deriving a variant without restating a base, cycling values across a batch, and opting out of generation entirely.

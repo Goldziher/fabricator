@@ -41,7 +41,7 @@ Adding a field to `Subscription` does not touch that test.
 go get github.com/Goldziher/fabricator/v2
 ```
 
-Requires Go 1.26 or newer.
+Requires Go 1.27 or newer.
 
 ## Quickstart
 
